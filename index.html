@@ -32,11 +32,13 @@
 
   /* Map and SVG Styling */
   .mapbox { 
-    background: #fff; border: 1px solid #dee2e6; border-radius: 1rem; 
+    background: #e9ecef url('https://staticmap.openstreetmap.de/staticmap.php?center=-20.4700,-54.6200&zoom=13&size=600x420&maptype=mapnik') center center no-repeat;
+    background-size: cover;
+    border: 1px solid #dee2e6; border-radius: 1rem; 
     overflow: hidden; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
   }
   #map { display: block; width: 100%; height: auto; }
-  .grid line { stroke: #f8f9fa; stroke-width: 1; }
+  .grid line { display: none; /* Hidden to show the real map image clearly */ }
   
   /* Map Drop-Pins Fix */
   .pin { cursor: pointer; outline: none; }
@@ -162,7 +164,7 @@
 </main>
 
 <footer class="container-xl mt-5 py-4 border-top text-center text-secondary">
-  <p class="small mb-2 fw-medium">Os locais marcados como simulados são exemplos fictícios ou dados pré-carregados para demonstração.<br>Cadastros e avaliações ficam salvos apenas neste navegador via LocalStorage.</p>
+  <p class="small mb-2 fw-medium">Os locais marcados como simulados são exemplos fictícios ou dados pré-carregados para demonstração.<br>Cadastros e avaliações são salvos globalmente em tempo real via Firebase e ficam visíveis para todos os usuários.</p>
   <p class="small fw-bold text-muted mb-3">desenvolvido por Giovanni Caio e Jhayson e Eduardo</p>
   <button type="button" class="btn btn-link btn-sm text-decoration-none fw-bold text-danger" id="reset">
     <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar base de dados inicial
@@ -279,8 +281,12 @@
 
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-const $ = s => document.querySelector(s), KEY = "conectapcd:v8";
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+const $ = s => document.querySelector(s);
 
 // Definição dos critérios
 const CR = [
@@ -328,7 +334,6 @@ function review(str, note){
 
 function seed(){
   return {
-    user:"", 
     places:SEED.map((s,i) => ({
       id:"s"+i, name:s[0], cat:s[1], address:s[2], lat:s[3], lng:s[4], sim:true, 
       reviews:[review(s[5], s[6])]
@@ -336,16 +341,58 @@ function seed(){
   };
 }
 
-let db, sel = null, armed = false;
-try { db = JSON.parse(localStorage.getItem(KEY)); } catch (e) { db = null; }
-if (!db || !Array.isArray(db.places)) db = seed();
+// Global Variables
+let db = { user: localStorage.getItem("conectapcd:user") || "", places: [] };
+let sel = null, armed = false;
+let fsdb, auth, placesRef, currentUser;
 
-function save(){
-  try { localStorage.setItem(KEY, JSON.stringify(db)); return true; }
-  catch (e) { return false; }
+// Initialize Firebase
+async function initFirebase() {
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'conectapcd-default';
+  const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+  
+  const app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  fsdb = getFirestore(app);
+  placesRef = collection(fsdb, 'artifacts', appId, 'public', 'data', 'places');
+
+  const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+  try {
+    if (token) {
+      await signInWithCustomToken(auth, token);
+    } else {
+      await signInAnonymously(auth);
+    }
+    currentUser = auth.currentUser;
+    if (!currentUser) return;
+    
+    // Listen for real-time global changes
+    onSnapshot(placesRef, (snapshot) => {
+      if (snapshot.empty) {
+        seedFirebase();
+      } else {
+        db.places = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        render();
+        if (sel) detail(); // Refresh active selection if available
+      }
+    }, (error) => {
+      console.error("Firebase Error:", error);
+    });
+  } catch (err) {
+    console.error("Auth Error:", err);
+  }
 }
 
-// Lógica de cálculo rigorosa (penaliza itens deixados em branco)
+async function seedFirebase() {
+  if (!currentUser) return;
+  const defaultPlaces = seed().places;
+  for (const p of defaultPlaces) {
+    const { id, ...data } = p;
+    await setDoc(doc(placesRef, id), data);
+  }
+}
+
+// Lógica de cálculo rigorosa (penaliza itens deixados em branco, ignora "Não se aplica")
 function score(p, need){
   const applicable = CR.filter(x => !need || x.n.includes(need));
   if (applicable.length === 0 || p.reviews.length === 0) return null;
@@ -377,7 +424,6 @@ function score(p, need){
 function getStarObj(s) {
   let st = 0;
   if (s !== null) {
-    // Escala de 0 a 1 -> converte para 1 a 5 estrelas (0 = 1 estrela, 1 = 5 estrelas)
     st = s === 0 ? 1 : Math.min(5, Math.max(1, Math.round(s * 5)));
   }
 
@@ -397,7 +443,7 @@ function visible(){
   const q = $("#q").value.trim().toLowerCase(), cat = $("#cat").value, nd = $("#nd").value;
   let L = db.places.filter(p => (!q || (p.name + " " + p.address + " " + p.cat).toLowerCase().includes(q)) && (!cat || p.cat === cat));
   if (nd) {
-    L = L.filter(p => { const s = score(p, nd); return s !== null; }); // Show all that have data
+    L = L.filter(p => { const s = score(p, nd); return s !== null; });
     L.sort((a, b) => score(b, nd) - score(a, nd));
   }
   return L;
@@ -416,7 +462,7 @@ function mapSvg(L, nd){
     const l = getStarObj(score(p, nd || null));
     const iconStr = l.st > 0 ? `${l.st}★` : '?';
     
-    // Drop-pin fixo pela base (0,0) na âncora do pin-inner
+    // Drop-pin fixo pela base (0,0) na âncora do pin-inner para prevenir Jitter (tremor)
     out += `<g class="pin ${l.mc}" data-id="${p.id}" tabindex="0" role="button" aria-label="${esc(p.name)}, ${l.st > 0 ? l.st + ' estrelas' : 'sem dados'}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">`
       + `<g class="pin-inner">`
       + (p.id === sel ? `<circle class="ring" cx="0" cy="-28" r="25"/>` : "")
@@ -529,7 +575,6 @@ function detail(){
   }
 
   h += `</div>`;
-  // Clean up last border bottom
   el.innerHTML = h.replace(/last-border-0" style="border-bottom-color: #dee2e6 !important;"/g, 'border-bottom-0"');
 }
 
@@ -616,38 +661,57 @@ $("#geo").addEventListener("click", () => {
   );
 });
 
-$("#fPlace").addEventListener("submit", e => {
+// Cadastrar Local - Salva no Firebase
+$("#fPlace").addEventListener("submit", async e => {
   e.preventDefault();
+  if (!currentUser) return;
+
   const f = new FormData(e.target);
   const lat = parseFloat(String(f.get("lat")).replace(",", ".")), lng = parseFloat(String(f.get("lng")).replace(",", "."));
   if (isNaN(lat) || isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) { $("#ePlace").textContent = "Coordenadas inválidas."; return; }
   
   db.user = String(f.get("user")).trim();
-  const p = {id:"u" + Date.now(), name:String(f.get("name")).trim(), cat:f.get("cat"), address:String(f.get("address")).trim(), lat, lng, sim:false, reviews:[]};
-  db.places.push(p);
-  save();
-  e.target.reset(); $("#lat").value = "-20.4697"; $("#lng").value = "-54.6201";
-  bootstrap.Modal.getInstance(document.getElementById("dPlace")).hide(); 
-  choose(p.id, true);
+  localStorage.setItem("conectapcd:user", db.user);
+  
+  const newId = "u" + Date.now();
+  const p = { name:String(f.get("name")).trim(), cat:f.get("cat"), address:String(f.get("address")).trim(), lat, lng, sim:false, reviews:[] };
+  
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Salvando...`;
+
+  try {
+    await setDoc(doc(placesRef, newId), p);
+    e.target.reset(); $("#lat").value = "-20.4697"; $("#lng").value = "-54.6201";
+    bootstrap.Modal.getInstance(document.getElementById("dPlace")).hide(); 
+    choose(newId, true);
+  } catch(err) {
+    $("#ePlace").textContent = "Erro ao salvar no servidor em tempo real.";
+  } finally {
+    btn.disabled = false; btn.innerHTML = `Salvar Local`;
+  }
 });
 
+// Helper para diminuir qualidade da foto antes de salvar no doc (limite 1mb)
 const shrink = f => new Promise((ok, no) => {
   const r = new FileReader();
   r.onload = () => {
     const i = new Image();
     i.onload = () => {
-      const k = Math.min(1, 720 / Math.max(i.width, i.height)), c = document.createElement("canvas");
+      const k = Math.min(1, 400 / Math.max(i.width, i.height)), c = document.createElement("canvas");
       c.width = Math.round(i.width * k); c.height = Math.round(i.height * k);
       c.getContext("2d").drawImage(i, 0, 0, c.width, c.height);
-      ok(c.toDataURL("image/jpeg", .7));
+      ok(c.toDataURL("image/jpeg", 0.5)); // Compressão agressiva para Firebase
     };
     i.onerror = no; i.src = r.result;
   };
   r.onerror = no; r.readAsDataURL(f);
 });
 
+// Enviar Avaliação - Atualiza documento no Firebase
 $("#fEval").addEventListener("submit", async e => {
   e.preventDefault();
+  if (!currentUser) return;
+  
   const f = new FormData(e.target), c = {};
   
   CR.forEach(x => { const v = f.get(x.k); if (v !== null) c[x.k] = v; });
@@ -663,32 +727,55 @@ $("#fEval").addEventListener("submit", async e => {
   catch (err) { $("#eEval").textContent = "Erro com a imagem. Tente sem fotos."; btn.disabled = false; btn.innerHTML = `Enviar Avaliação`; return; }
   
   db.user = String(f.get("user")).trim();
+  localStorage.setItem("conectapcd:user", db.user);
+
   const p = db.places.find(x => x.id === sel);
-  p.reviews.push({user:db.user, date:new Date().toISOString().slice(0, 10), note:Number(f.get("note")), comment:String(f.get("comment")).trim(), photos, c});
-  save();
-  
-  e.target.reset(); 
-  btn.disabled = false; btn.innerHTML = `Enviar Avaliação`;
-  bootstrap.Modal.getInstance(document.getElementById("dEval")).hide(); 
-  choose(p.id, false);
+  const newReview = {user:db.user, date:new Date().toISOString().slice(0, 10), note:Number(f.get("note")), comment:String(f.get("comment")).trim(), photos, c};
+  const updatedReviews = [...p.reviews, newReview];
+
+  try {
+    await updateDoc(doc(placesRef, sel), { reviews: updatedReviews });
+    e.target.reset(); 
+    bootstrap.Modal.getInstance(document.getElementById("dEval")).hide(); 
+    choose(sel, false);
+  } catch(err) {
+    $("#eEval").textContent = "Erro ao enviar avaliação para o servidor.";
+  } finally {
+    btn.disabled = false; btn.innerHTML = `Enviar Avaliação`;
+  }
 });
 
-$("#reset").addEventListener("click", () => {
+// Reset da Base de Dados no Firebase
+$("#reset").addEventListener("click", async () => {
   const b = $("#reset");
   if (!armed) { 
     armed = true; 
-    b.innerHTML = "<i class='bi bi-exclamation-triangle-fill me-1'></i>Confirmar Exclusão dos Dados"; 
+    b.innerHTML = "<i class='bi bi-exclamation-triangle-fill me-1'></i>Confirmar Exclusão Global"; 
     b.classList.add("fw-bolder");
     return; 
   }
   armed = false; 
-  b.innerHTML = "<i class='bi bi-arrow-counterclockwise me-1'></i>Restaurar base de dados inicial"; 
+  b.innerHTML = "<span class='spinner-border spinner-border-sm me-1'></span>Restaurando..."; 
   b.classList.remove("fw-bolder");
-  db = seed(); sel = null; save(); render();
+  
+  if (currentUser) {
+    try {
+      const snap = await getDocs(placesRef);
+      for (const d of snap.docs) {
+        await deleteDoc(d.ref);
+      }
+      await seedFirebase();
+    } catch(err) {
+      console.error("Error resetting database", err);
+    }
+  }
+  
+  b.innerHTML = "<i class='bi bi-arrow-counterclockwise me-1'></i>Restaurar base de dados inicial"; 
+  sel = null; 
 });
 
-// Init
-render();
+// Inicia aplicação
+initFirebase();
 </script>
 </body>
 </html>
