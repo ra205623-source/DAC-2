@@ -2,75 +2,77 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <!-- CORRIGIDO: sem maximum-scale/user-scalable=no (quebra zoom e acessibilidade no celular) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ConectaPCD - Campo Grande</title>
-  
-  <!-- Bootstrap 5 CSS -->
+
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  
+  <link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+
   <style>
     body { background-color: #f8f9fa; display: flex; flex-direction: column; min-height: 100vh; }
-    main { flex-grow: 1; padding-top: 20px; padding-bottom: 20px; }
-    
-    #staticMapImage { 
-      height: 500px; 
-      width: 100%; 
-      object-fit: cover;
-      object-position: center;
-      border-radius: 12px; 
+    main { flex-grow: 1; padding-top: 16px; padding-bottom: 20px; }
+
+    /* Mapa interativo (substitui a imagem estática do Yandex) */
+    #map {
+      height: 45vh;
+      min-height: 280px;
+      width: 100%;
+      border-radius: 12px;
       border: 2px solid #dee2e6;
       box-shadow: 0 4px 6px rgba(0,0,0,0.05);
       background-color: #e9ecef;
     }
-
-    .place-card {
-      cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-      border-radius: 10px;
+    @media (min-width: 992px) {
+      #map { height: 560px; }
+      #placesList { max-height: 380px; overflow-y: auto; }
     }
+
+    .pin {
+      width: 30px; height: 30px; border-radius: 50%;
+      color: #fff; font-weight: 700; font-size: 14px;
+      display: flex; align-items: center; justify-content: center;
+      border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.4);
+    }
+    .pin.sel { transform: scale(1.3); border-color: #0d6efd; }
+
+    .place-card { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border-radius: 10px; }
     .place-card:hover, .place-card.active {
       transform: translateY(-2px);
       box-shadow: 0 6px 12px rgba(0,0,0,0.1);
       border-color: #0d6efd;
     }
 
-    /* Estrelas visuais */
     .stars-display { color: #ffc107; font-size: 1.1rem; letter-spacing: 2px; }
     .stars-empty { color: #e4e5e9; }
 
-    /* Sistema de notas em estrelas clicáveis (Avaliação) */
-    .rating-input {
-      display: flex;
-      flex-direction: row-reverse;
-      justify-content: flex-end;
-      gap: 5px;
+    /* CORRIGIDO: radios "display:none" + required impediam o envio da avaliação
+       (o navegador não consegue focar um campo obrigatório escondido e o formulário nunca é enviado).
+       Agora ficam apenas invisíveis, e a validação é feita por JavaScript. */
+    .rating-input { display: flex; flex-direction: row-reverse; justify-content: flex-end; gap: 5px; position: relative; }
+    .rating-input input {
+      position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none;
     }
-    .rating-input input { display: none; }
-    .rating-input label {
-      font-size: 2rem;
-      color: #e4e5e9;
-      cursor: pointer;
-      transition: color 0.2s;
-    }
+    .rating-input label { font-size: 2.2rem; line-height: 1; color: #e4e5e9; cursor: pointer; transition: color 0.2s; padding: 0 2px; }
     .rating-input label:hover,
     .rating-input label:hover ~ label,
-    .rating-input input:checked ~ label {
-      color: #ffc107;
-    }
+    .rating-input input:checked ~ label { color: #ffc107; }
+    .rating-input input:focus-visible + label { outline: 2px solid #0d6efd; border-radius: 4px; }
 
-    footer {
-      background-color: #212529;
-      color: #adb5bd;
-      text-align: center;
-      padding: 15px 0;
-      font-size: 0.9rem;
-      margin-top: auto;
-    }
+    /* Ícone do botão de camadas sem depender de imagem externa */
+    .leaflet-control-layers-toggle { background-image: none !important; width: 34px !important; height: 34px !important;
+      display: flex; align-items: center; justify-content: center; }
+    .leaflet-control-layers-toggle::before { content: "🗺️"; font-size: 18px; }
+
+    .review-item { border-left: 3px solid #dee2e6; padding-left: 10px; }
+    #reviewsList { max-height: 30vh; overflow-y: auto; }
+
+    footer { background-color: #212529; color: #adb5bd; text-align: center; padding: 15px 0; font-size: 0.9rem; margin-top: auto; }
   </style>
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+<nav class="navbar navbar-dark bg-primary shadow-sm">
   <div class="container">
     <a class="navbar-brand fw-bold" href="#">ConectaPCD</a>
     <button class="btn btn-light fw-bold" data-bs-toggle="modal" data-bs-target="#modalPlace">
@@ -80,32 +82,33 @@
 </nav>
 
 <main class="container">
-  <div class="row g-4">
-    <!-- Coluna do Mapa -->
-    <div class="col-lg-7">
-      <img src="" id="staticMapImage" alt="Mapa de Campo Grande com pins de avaliação numerados">
-      <p class="text-muted small mt-2">Os números no mapa correspondem aos números da lista ao lado. (Verde = Bom, Amarelo = Regular, Vermelho = Ruim).</p>
+  <div id="modeBanner" class="alert alert-warning small d-none" role="status"></div>
+
+  <div class="row g-3 g-lg-4">
+    <!-- Mapa -->
+    <div class="col-12 col-lg-7">
+      <div id="pickHint" class="alert alert-primary small d-none d-flex justify-content-between align-items-center" role="status">
+        <span>Toque no mapa para marcar o local.</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="btnPickCancel">Cancelar</button>
+      </div>
+      <div id="mapNote" class="alert alert-warning small d-none">Os mapas online não carregaram (conexão, bloqueio ou pré-visualização do chat). Mostrando uma grade com os pins. Baixe o arquivo e abra no navegador, ou publique o site, para ver o mapa de ruas.</div>
+      <div id="map" role="application" aria-label="Mapa de Campo Grande com locais avaliados"></div>
+      <p class="text-muted small mt-2 mb-0">Os números no mapa correspondem aos números da lista. (Verde = Bom, Amarelo = Regular, Vermelho = Ruim, Cinza = Sem avaliações).</p>
     </div>
 
-    <!-- Coluna da Lista e Detalhes -->
-    <div class="col-lg-5 d-flex flex-column" style="max-height: 600px;">
+    <!-- Lista e detalhes -->
+    <div class="col-12 col-lg-5 d-flex flex-column">
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <input type="text" id="searchInput" class="form-control" placeholder="Buscar local, endereço ou categoria...">
-        </div>
-      </div>
-      
-      <!-- Detalhes do Local (Oculto por padrão) -->
-      <div id="placeDetails" class="card shadow-sm border-primary d-none mb-3 flex-shrink-0">
-        <div class="card-body" id="detailsContent">
-          <!-- Injetado via JS -->
+          <input type="search" id="searchInput" class="form-control" placeholder="Buscar local, endereço ou categoria..." aria-label="Buscar local">
         </div>
       </div>
 
-      <!-- Lista de Locais -->
-      <div class="flex-grow-1 overflow-auto pe-2" id="placesList">
-        <!-- Injetado via JS -->
+      <div id="placeDetails" class="card shadow-sm border-primary d-none mb-3">
+        <div class="card-body" id="detailsContent"></div>
       </div>
+
+      <div class="pe-lg-2" id="placesList"></div>
     </div>
   </div>
 </main>
@@ -122,17 +125,17 @@
     <div class="modal-content">
       <div class="modal-header bg-primary text-white">
         <h5 class="modal-title">Novo Local</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
       </div>
       <div class="modal-body">
         <form id="formPlace">
           <div class="mb-3">
-            <label class="form-label fw-bold">Nome do local</label>
-            <input type="text" name="name" class="form-control" required>
+            <label class="form-label fw-bold" for="pName">Nome do local</label>
+            <input type="text" id="pName" name="name" class="form-control" required>
           </div>
           <div class="mb-3">
-            <label class="form-label fw-bold">Categoria</label>
-            <select name="cat" class="form-select" required>
+            <label class="form-label fw-bold" for="pCat">Categoria</label>
+            <select id="pCat" name="cat" class="form-select" required>
               <option value="Espaço público">Espaço público</option>
               <option value="Shopping/Comércio">Shopping/Comércio</option>
               <option value="Restaurante">Restaurante</option>
@@ -141,28 +144,28 @@
             </select>
           </div>
           <div class="mb-3">
-            <label class="form-label fw-bold">Endereço</label>
-            <input type="text" name="address" class="form-control" required>
+            <label class="form-label fw-bold" for="pAddr">Endereço</label>
+            <input type="text" id="pAddr" name="address" class="form-control" required>
           </div>
           <div class="row mb-3">
             <div class="col-6">
-              <label class="form-label fw-bold">Latitude</label>
-              <input type="text" id="latInput" name="lat" class="form-control" value="-20.4697" required>
+              <label class="form-label fw-bold" for="latInput">Latitude</label>
+              <input type="text" inputmode="decimal" id="latInput" name="lat" class="form-control" value="-20.4697" required>
             </div>
             <div class="col-6">
-              <label class="form-label fw-bold">Longitude</label>
-              <input type="text" id="lngInput" name="lng" class="form-control" value="-54.6201" required>
+              <label class="form-label fw-bold" for="lngInput">Longitude</label>
+              <input type="text" inputmode="decimal" id="lngInput" name="lng" class="form-control" value="-54.6201" required>
             </div>
           </div>
-          <button type="button" class="btn btn-outline-secondary w-100" id="btnGeo">
-            📍 Usar minha localização atual
-          </button>
-          <div id="geoError" class="text-danger small mt-2 d-none">Não foi possível obter a localização. Digite manualmente.</div>
+          <button type="button" class="btn btn-outline-primary w-100 mb-2" id="btnPick">🗺️ Escolher no mapa</button>
+          <button type="button" class="btn btn-outline-secondary w-100" id="btnGeo">📍 Usar minha localização atual</button>
+          <div id="geoError" class="text-danger small mt-2 d-none"></div>
+          <div id="placeError" class="text-danger small mt-2 d-none"></div>
         </form>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="submit" form="formPlace" class="btn btn-primary">Salvar Local</button>
+        <button type="submit" form="formPlace" class="btn btn-primary" id="btnSavePlace">Salvar Local</button>
       </div>
     </div>
   </div>
@@ -174,352 +177,615 @@
     <div class="modal-content">
       <div class="modal-header bg-success text-white">
         <h5 class="modal-title">Avaliar Acessibilidade</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
       </div>
       <div class="modal-body">
-        <form id="formEval">
+        <form id="formEval" novalidate>
           <input type="hidden" id="evalPlaceId">
-          
+
           <div class="mb-3">
-            <label class="form-label fw-bold">Seu Nome</label>
-            <input type="text" name="user" class="form-control" required placeholder="Como deseja ser identificado">
+            <label class="form-label fw-bold" for="evalUser">Seu Nome</label>
+            <input type="text" id="evalUser" name="user" class="form-control" required placeholder="Como deseja ser identificado">
           </div>
 
           <div class="mb-3">
             <label class="form-label fw-bold">Nota Geral (Estrelas)</label>
-            <div class="rating-input">
-              <input type="radio" id="star5" name="note" value="5" required><label for="star5">★</label>
-              <input type="radio" id="star4" name="note" value="4"><label for="star4">★</label>
-              <input type="radio" id="star3" name="note" value="3"><label for="star3">★</label>
-              <input type="radio" id="star2" name="note" value="2"><label for="star2">★</label>
-              <input type="radio" id="star1" name="note" value="1"><label for="star1">★</label>
+            <div class="rating-input" role="radiogroup" aria-label="Nota geral">
+              <input type="radio" id="star5" name="note" value="5"><label for="star5" title="5 estrelas">★</label>
+              <input type="radio" id="star4" name="note" value="4"><label for="star4" title="4 estrelas">★</label>
+              <input type="radio" id="star3" name="note" value="3"><label for="star3" title="3 estrelas">★</label>
+              <input type="radio" id="star2" name="note" value="2"><label for="star2" title="2 estrelas">★</label>
+              <input type="radio" id="star1" name="note" value="1"><label for="star1" title="1 estrela">★</label>
             </div>
+            <div id="noteError" class="text-danger small mt-1 d-none">Escolha uma nota de 1 a 5 estrelas.</div>
           </div>
 
           <hr>
           <h6 class="fw-bold text-success mb-3">Critérios Específicos</h6>
           <p class="small text-muted mb-3">Deixar como "Não observei" diminui a nota do local. Use "Não se aplica" para itens que não fazem sentido no local.</p>
-          
-          <div id="criteriaContainer">
-            <!-- Gerado via JS -->
-          </div>
-          
+
+          <div id="criteriaContainer"></div>
+
           <div class="mb-3 mt-3">
-            <label class="form-label fw-bold">Comentário (opcional)</label>
-            <textarea name="comment" class="form-control" rows="2"></textarea>
+            <label class="form-label fw-bold" for="evalComment">Comentário (opcional)</label>
+            <textarea id="evalComment" name="comment" class="form-control" rows="2"></textarea>
           </div>
+          <div id="evalError" class="text-danger small d-none"></div>
         </form>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="submit" form="formEval" class="btn btn-success">Enviar Avaliação</button>
+        <button type="submit" form="formEval" class="btn btn-success" id="btnSaveEval">Enviar Avaliação</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Firebase (banco de dados compartilhado entre todos os usuários) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <script>
 // ==========================================
-// 1. CONFIGURAÇÕES E CRITÉRIOS
+// 1. CONFIGURAÇÃO
 // ==========================================
-const STORAGE_KEY = "conectapcd_v3_cg";
+// Para as avaliações aparecerem para TODOS os usuários, crie um projeto gratuito no
+// Firebase (console.firebase.google.com) > Firestore Database > e cole aqui o firebaseConfig
+// do seu app web. Enquanto estiver com "COLE_AQUI", o site funciona em MODO LOCAL
+// (dados só no aparelho de quem usa).
+const FIREBASE_CONFIG = {
+  apiKey: "COLE_AQUI",
+  authDomain: "COLE_AQUI",
+  projectId: "COLE_AQUI",
+  appId: "COLE_AQUI"
+};
+
+const STORAGE_KEY = "conectapcd_v4_cg";
 
 const CRITERIA = [
-  {k:"degrau", t:"Entrada sem degraus", canBeNA: true},
-  {k:"rampa", t:"Possui Rampa", canBeNA: true},
-  {k:"banheiro", t:"Banheiro adaptado", canBeNA: false},
-  {k:"circ", t:"Espaço p/ circular de cadeira", canBeNA: false},
-  {k:"tátil", t:"Piso tátil", canBeNA: false},
-  {k:"braile", t:"Informações em braile", canBeNA: false},
-  {k:"libras", t:"Atendimento em Libras", canBeNA: false}
+  {k:"degrau",   t:"Entrada sem degraus",           canBeNA: true},
+  {k:"rampa",    t:"Possui Rampa",                  canBeNA: true},
+  {k:"banheiro", t:"Banheiro adaptado",             canBeNA: false},
+  {k:"circ",     t:"Espaço p/ circular de cadeira", canBeNA: false},
+  {k:"tatil",    t:"Piso tátil",                    canBeNA: false}, // chave sem acento
+  {k:"braile",   t:"Informações em braile",         canBeNA: false},
+  {k:"libras",   t:"Atendimento em Libras",         canBeNA: false}
 ];
 
-// Dados iniciais
 const SEED_DATA = [
-  {
-    id: "cg_1", name: "Bioparque Pantanal", cat: "Espaço público", address: "Altos da Afonso Pena", 
+  { id: "cg_1", name: "Bioparque Pantanal", cat: "Espaço público", address: "Altos da Afonso Pena",
     lat: -20.4534, lng: -54.5828,
-    reviews: [{
-      user: "Equipe Conecta", note: 5, comment: "Referência.",
-      c: { "degrau": "y", "rampa": "na", "banheiro": "y", "circ": "y", "tátil": "y", "braile": "y", "libras": "y" }
-    }]
-  },
-  {
-    id: "cg_2", name: "Parque das Nações Indígenas", cat: "Espaço público", address: "Av. Afonso Pena", 
+    reviews: [{ user: "Equipe Conecta", note: 5, comment: "Referência.", at: 1,
+      c: { degrau:"y", rampa:"na", banheiro:"y", circ:"y", tatil:"y", braile:"y", libras:"y" } }] },
+  { id: "cg_2", name: "Parque das Nações Indígenas", cat: "Espaço público", address: "Av. Afonso Pena",
     lat: -20.4578, lng: -54.5862,
-    reviews: [{
-      user: "Avaliador", note: 4, comment: "Boas rampas.",
-      c: { "degrau": "y", "rampa": "y", "banheiro": "y", "circ": "y", "tátil": "n", "braile": "n", "libras": "n" }
-    }]
-  },
-  {
-    id: "cg_3", name: "Shopping Campo Grande", cat: "Shopping/Comércio", address: "Av. Afonso Pena", 
+    reviews: [{ user: "Avaliador", note: 4, comment: "Boas rampas.", at: 1,
+      c: { degrau:"y", rampa:"y", banheiro:"y", circ:"y", tatil:"n", braile:"n", libras:"n" } }] },
+  { id: "cg_3", name: "Shopping Campo Grande", cat: "Shopping/Comércio", address: "Av. Afonso Pena",
     lat: -20.4552, lng: -54.5960,
-    reviews: [{
-      user: "Visitante", note: 5, comment: "Excelente.",
-      c: { "degrau": "y", "rampa": "y", "banheiro": "y", "circ": "y", "tátil": "y", "braile": "n", "libras": "n" }
-    }]
-  },
-  {
-    id: "cg_4", name: "Mercadão Municipal", cat: "Shopping/Comércio", address: "R. 7 de Setembro", 
+    reviews: [{ user: "Visitante", note: 5, comment: "Excelente.", at: 1,
+      c: { degrau:"y", rampa:"y", banheiro:"y", circ:"y", tatil:"y", braile:"n", libras:"n" } }] },
+  { id: "cg_4", name: "Mercadão Municipal", cat: "Shopping/Comércio", address: "R. 7 de Setembro",
     lat: -20.4690, lng: -54.6183,
-    reviews: [{
-      user: "Visitante", note: 3, comment: "Corredores apertados.",
-      c: { "degrau": "y", "rampa": "y", "banheiro": "y", "circ": "n", "tátil": "n", "braile": "n", "libras": "n" }
-    }]
-  }
+    reviews: [{ user: "Visitante", note: 3, comment: "Corredores apertados.", at: 1,
+      c: { degrau:"y", rampa:"y", banheiro:"y", circ:"n", tatil:"n", braile:"n", libras:"n" } }] }
 ];
 
 // ==========================================
-// 2. BANCO DE DADOS
+// 2. UTILIDADES
+// ==========================================
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function showMsg(el, text) {
+  el.textContent = text;
+  el.classList.remove("d-none");
+}
+function hideMsg(el) { el.classList.add("d-none"); }
+
+// ==========================================
+// 3. BANCO DE DADOS (nuvem ou local)
 // ==========================================
 let db = [];
-try {
-  const local = localStorage.getItem(STORAGE_KEY);
-  db = local ? JSON.parse(local) : SEED_DATA;
-} catch (e) {
-  db = SEED_DATA;
+let cloud = null;           // coleção do Firestore, se configurado
+let selectedPlaceId = null;
+let firstLoad = true;
+
+const cloudConfigured = typeof firebase !== "undefined" &&
+  FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.startsWith("COLE");
+
+function sortDb() {
+  db.sort((a, b) => String(a.id).localeCompare(String(b.id), "pt-BR", {numeric: true}));
 }
 
-function saveData() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    db = raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(SEED_DATA));
+  } catch (e) {
+    db = JSON.parse(JSON.stringify(SEED_DATA));
+  }
+  sortDb();
+}
+function saveLocal() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); } catch (e) {}
+}
+
+function startLocalMode(reason) {
+  cloud = null;
+  loadLocal();
+  const b = $("modeBanner");
+  b.textContent = reason || "Modo local: as avaliações ficam salvas só neste aparelho. Configure o Firebase no código para que todos os usuários vejam as mesmas avaliações.";
+  b.classList.remove("d-none");
+  renderApp(true);
+}
+
+function startCloudMode() {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  cloud = firebase.firestore().collection("places");
+  let seeded = false;
+  cloud.onSnapshot(snap => {
+    if (snap.empty && !seeded) {             // primeira execução: grava os locais iniciais
+      seeded = true;
+      SEED_DATA.forEach(p => cloud.doc(p.id).set(p));
+      return;
+    }
+    db = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    sortDb();
+    renderApp(firstLoad);
+    firstLoad = false;
+    if (selectedPlaceId) renderDetails();   // mostra avaliações de outros usuários em tempo real
+  }, err => {
+    console.error(err);
+    startLocalMode("Não foi possível conectar ao banco de dados online (verifique as regras do Firestore). Usando modo local.");
+  });
+}
+
+async function addPlace(p) {
+  if (cloud) { await cloud.doc(p.id).set(p); }
+  else { db.push(p); sortDb(); saveLocal(); renderApp(true); }
+}
+
+async function addReview(placeId, review) {
+  if (cloud) {
+    await cloud.doc(placeId).update({ reviews: firebase.firestore.FieldValue.arrayUnion(review) });
+  } else {
+    const p = db.find(x => x.id === placeId);
+    if (!p) return;
+    if (!p.reviews) p.reviews = [];
+    p.reviews.push(review);
+    saveLocal();
+    renderApp(false);
+    renderDetails();
+  }
 }
 
 // ==========================================
-// 3. LÓGICA DE CÁLCULO E ESTRELAS
+// 4. CÁLCULO DE ESTRELAS
 // ==========================================
 function calculateStars(place) {
   if (!place.reviews || place.reviews.length === 0) return 0;
-  
-  let totalPoints = 0;
-  let totalApplicable = 0;
-  let manualStarsSum = 0;
+  let totalPoints = 0, totalApplicable = 0, manualStarsSum = 0;
 
   place.reviews.forEach(rev => {
-    manualStarsSum += Number(rev.note);
+    manualStarsSum += Number(rev.note) || 0;
     CRITERIA.forEach(crit => {
-      const answer = rev.c[crit.k];
-      if (answer === "na") return; 
-      
+      const answer = (rev.c || {})[crit.k];
+      if (answer === "na") return;
       totalApplicable++;
-      if (answer === "y") {
-        totalPoints++;
-      }
+      if (answer === "y") totalPoints++;
     });
   });
 
-  if (totalApplicable === 0) {
-    return Math.round(manualStarsSum / place.reviews.length);
-  }
-
-  const percentage = totalPoints / totalApplicable;
-  let calcStars = Math.round((percentage * 4) + 1);
-  return calcStars;
+  if (totalApplicable === 0) return Math.round(manualStarsSum / place.reviews.length);
+  return Math.round((totalPoints / totalApplicable) * 4 + 1);
 }
 
 function renderStarsHTML(stars) {
   if (stars === 0) return '<span class="text-muted small">Sem avaliações</span>';
-  let html = '<span class="stars-display">';
-  for (let i = 1; i <= 5; i++) {
-    html += i <= stars ? '★' : '<span class="stars-empty">★</span>';
-  }
-  html += '</span>';
-  return html;
+  let html = '<span class="stars-display" aria-label="' + stars + ' de 5 estrelas">';
+  for (let i = 1; i <= 5; i++) html += i <= stars ? '★' : '<span class="stars-empty">★</span>';
+  return html + '</span>';
+}
+
+function colorFor(stars) {
+  if (stars >= 4) return "#198754";
+  if (stars === 3) return "#ffc107";
+  if (stars > 0) return "#dc3545";
+  return "#6c757d";
 }
 
 // ==========================================
-// 4. ATUALIZAR MAPA COM PINS NUMERADOS
+// 5. MAPA INTERATIVO (Leaflet + OpenStreetMap)
 // ==========================================
-function updateMapImage(placesToShow) {
-  if (placesToShow.length === 0) {
-    document.getElementById("staticMapImage").src = "https://static-maps.yandex.ru/1.x/?lang=pt-BR&ll=-54.6201,-20.4697&z=13&l=map&size=600,450";
+let map, markersLayer;
+const markerById = {};
+
+let pickMode = false;
+let userMarker = null;
+let lastFitPts = null;
+let userMoved = false;
+
+function fitPts(pts) {
+  if (!map || !pts || !pts.length) return;
+  if (pts.length === 1) map.setView(pts[0], 15);
+  else map.fitBounds(pts, { padding: [30, 30] });
+}
+
+function initMap() {
+  if (typeof L === "undefined") {
+    $("map").innerHTML = '<div class="p-4 text-center text-muted">Não foi possível carregar o mapa. Verifique sua conexão e recarregue a página. A lista de locais continua funcionando.</div>';
     return;
   }
-  
-  const baseUrl = "https://static-maps.yandex.ru/1.x/?lang=pt-BR&l=map&size=600,450";
-  
-  const markers = placesToShow.map((p, index) => {
-    const stars = calculateStars(p);
-    let color = "gr"; // cinzento
-    if (stars >= 4) color = "gn"; // verde
-    else if (stars === 3) color = "yw"; // amarelo
-    else if (stars > 0) color = "rd"; // vermelho
-    
-    let markerNumber = index + 1;
-    if (markerNumber > 99) markerNumber = ""; 
-    
-    // CORRIGIDO: O "m" agora vem ANTES do número para montar o marcador certo na API (ex: pm2gnm1)
-    return `${p.lng},${p.lat},pm2${color}m${markerNumber}`;
-  }).join("~");
 
-  document.getElementById("staticMapImage").src = `${baseUrl}&pt=${markers}`;
+  map = L.map("map", { tap: false }).setView([-20.4697, -54.6201], 12);
+
+  // Fontes de mapa gratuitas e sem chave. Se uma falhar (bloqueio/erro), troca sozinha para a próxima.
+  // Também dá para escolher manualmente no botão de camadas no canto do mapa.
+  const providers = [
+    { name: "Ruas (Esri)",
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+      opt: { maxZoom: 19, attribution: 'Tiles &copy; Esri' } },
+    { name: "OpenStreetMap",
+      url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      opt: { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } },
+    { name: "OpenStreetMap França",
+      url: "https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
+      opt: { subdomains: "abc", maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> France' } },
+    { name: "Satélite (Esri)",
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      opt: { maxZoom: 19, attribution: 'Tiles &copy; Esri' } }
+  ];
+  // Fundo offline: se todos os servidores de mapa estiverem bloqueados (ex.: pré-visualização do chat,
+  // rede da escola), desenha uma grade com coordenadas para os pins continuarem úteis.
+  let offlineGrid = null;
+  function showOfflineGrid() {
+    if (offlineGrid) return;
+    const Grid = L.GridLayer.extend({
+      createTile(coords) {
+        const size = this.getTileSize();
+        const tile = document.createElement("canvas");
+        tile.width = size.x; tile.height = size.y;
+        const ctx = tile.getContext("2d");
+        ctx.fillStyle = "#eef3ea"; ctx.fillRect(0, 0, size.x, size.y);
+        ctx.strokeStyle = "#e0e7da"; ctx.lineWidth = 1; ctx.beginPath();
+        for (let k = 1; k < 4; k++) { const v = k * size.x / 4; ctx.moveTo(v, 0); ctx.lineTo(v, size.y); ctx.moveTo(0, v); ctx.lineTo(size.x, v); }
+        ctx.stroke();
+        ctx.strokeStyle = "#cfd8c8"; ctx.strokeRect(0.5, 0.5, size.x - 1, size.y - 1);
+        const nw = map.unproject(coords.scaleBy(size), coords.z);
+        ctx.fillStyle = "#7a8a72"; ctx.font = "10px sans-serif";
+        ctx.fillText(nw.lat.toFixed(3) + ", " + nw.lng.toFixed(3), 6, 14);
+        return tile;
+      }
+    });
+    offlineGrid = new Grid({ maxZoom: 19 }).addTo(map);
+    offlineGrid.setZIndex(0);
+  }
+
+  const layers = providers.map(p => L.tileLayer(p.url, p.opt));
+  const baseMaps = {};
+  providers.forEach((p, i) => { baseMaps[p.name] = layers[i]; });
+  const errCount = layers.map(() => 0);
+  let manual = false, autoSwitching = false;
+
+  layers.forEach((layer, i) => {
+    layer.on("tileerror", () => {
+      errCount[i]++;
+      if (errCount[i] === 4 && !manual && map.hasLayer(layer)) {
+        const next = i + 1;                       // o satélite fica só para escolha manual
+        if (next < providers.length - 1) {
+          autoSwitching = true;
+          map.removeLayer(layer);
+          layers[next].addTo(map);
+          autoSwitching = false;
+        } else {
+          $("mapNote").classList.remove("d-none");
+          showOfflineGrid();
+        }
+      }
+    });
+    layer.on("tileload", () => $("mapNote").classList.add("d-none"));
+  });
+
+  layers[0].addTo(map);
+  L.control.layers(baseMaps, null, { position: "topright" }).addTo(map);
+  map.on("baselayerchange", () => { if (!autoSwitching) manual = true; });
+
+  markersLayer = L.layerGroup().addTo(map);
+
+  // Botão "minha localização" no mapa
+  const LocateCtl = L.Control.extend({
+    options: { position: "topleft" },
+    onAdd() {
+      const b = L.DomUtil.create("button", "btn btn-light btn-sm shadow-sm border");
+      b.type = "button"; b.innerHTML = "📍"; b.title = "Minha localização";
+      b.setAttribute("aria-label", "Ir para minha localização");
+      L.DomEvent.disableClickPropagation(b);
+      b.addEventListener("click", () => {
+        if (!window.isSecureContext) { alert("A localização só funciona em endereço seguro (https)."); return; }
+        map.locate({ setView: true, maxZoom: 16 });
+      });
+      return b;
+    }
+  });
+  map.addControl(new LocateCtl());
+  map.on("locationfound", e => {
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.circleMarker(e.latlng, { radius: 8, color: "#fff", weight: 3, fillColor: "#0d6efd", fillOpacity: 1 }).addTo(map);
+  });
+  map.on("locationerror", () => alert("Não foi possível obter sua localização. Permita o acesso no navegador."));
+
+  // Toque no mapa para escolher a posição de um novo local
+  map.on("click", e => {
+    if (!pickMode) return;
+    $("latInput").value = e.latlng.lat.toFixed(5);
+    $("lngInput").value = e.latlng.lng.toFixed(5);
+    endPick();
+  });
+
+  // Evita mapa cinza/cortado em celulares e ao girar a tela
+  const fix = () => {
+    map.invalidateSize();
+    if (!userMoved && lastFitPts) fitPts(lastFitPts);
+  };
+  $("map").addEventListener("pointerdown", () => { userMoved = true; });
+  if (window.ResizeObserver) new ResizeObserver(fix).observe($("map"));
+  setTimeout(fix, 250);
+  window.addEventListener("load", fix);
+  window.addEventListener("resize", fix);
+  window.addEventListener("orientationchange", () => setTimeout(fix, 300));
+}
+
+function endPick() {
+  pickMode = false;
+  $("pickHint").classList.add("d-none");
+  bootstrap.Modal.getOrCreateInstance($("modalPlace")).show();
+}
+
+function updateMap(places, fit) {
+  if (!map) return;
+  markersLayer.clearLayers();
+  Object.keys(markerById).forEach(k => delete markerById[k]);
+
+  places.forEach((p, i) => {
+    if (isNaN(p.lat) || isNaN(p.lng)) return;
+    const color = colorFor(calculateStars(p));
+    const sel = p.id === selectedPlaceId ? " sel" : "";
+    const icon = L.divIcon({
+      className: "",
+      html: `<div class="pin${sel}" style="background:${color}">${i + 1}</div>`,
+      iconSize: [30, 30], iconAnchor: [15, 15]
+    });
+    const m = L.marker([p.lat, p.lng], { icon, title: p.name }).addTo(markersLayer);
+    m.on("click", () => selectPlace(p.id, true));
+    markerById[p.id] = m;
+  });
+
+  if (fit && places.length) {
+    const pts = places.filter(p => !isNaN(p.lat) && !isNaN(p.lng)).map(p => [p.lat, p.lng]);
+    lastFitPts = pts;
+    userMoved = false;
+    fitPts(pts);
+  }
 }
 
 // ==========================================
-// 5. RENDERIZAÇÃO DA LISTA COM NÚMEROS
+// 6. RENDERIZAÇÃO
 // ==========================================
-let selectedPlaceId = null;
+function filteredPlaces() {
+  const q = $("searchInput").value.toLowerCase().trim();
+  return db.filter(p =>
+    (p.name || "").toLowerCase().includes(q) ||
+    (p.address || "").toLowerCase().includes(q) ||
+    (p.cat || "").toLowerCase().includes(q)
+  );
+}
 
-function renderApp() {
-  const query = document.getElementById("searchInput").value.toLowerCase();
-  const listEl = document.getElementById("placesList");
+function renderApp(fitMap) {
+  const listEl = $("placesList");
   listEl.innerHTML = "";
-  
-  const filtered = db.filter(p => p.name.toLowerCase().includes(query) || p.address.toLowerCase().includes(query));
+  const filtered = filteredPlaces();
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = '<p class="text-muted small">Nenhum local encontrado. Use "+ Cadastrar Local" para adicionar.</p>';
+  }
 
   filtered.forEach((p, index) => {
     const stars = calculateStars(p);
-    const num = index + 1;
-    
-    // Cor da tag (badge) combinando com a cor do pin no mapa
     let badgeClass = "bg-secondary";
     if (stars >= 4) badgeClass = "bg-success";
     else if (stars === 3) badgeClass = "bg-warning text-dark";
     else if (stars > 0) badgeClass = "bg-danger";
 
     const item = document.createElement("div");
-    item.className = `card place-card mb-2 ${selectedPlaceId === p.id ? 'active' : ''}`;
+    item.className = "card place-card mb-2" + (selectedPlaceId === p.id ? " active" : "");
     item.innerHTML = `
-      <div class="card-body p-3 d-flex justify-content-between align-items-center">
+      <div class="card-body p-3 d-flex justify-content-between align-items-center gap-2">
         <div>
-          <h6 class="mb-1 fw-bold">
-            <span class="badge ${badgeClass} me-2 shadow-sm">${num}</span>${p.name}
-          </h6>
-          <small class="text-muted d-block">${p.cat}</small>
+          <h6 class="mb-1 fw-bold"><span class="badge ${badgeClass} me-2 shadow-sm">${index + 1}</span>${esc(p.name)}</h6>
+          <small class="text-muted d-block">${esc(p.cat)}</small>
         </div>
-        <div class="text-end">
-          ${renderStarsHTML(stars)}
-        </div>
-      </div>
-    `;
-    item.onclick = () => selectPlace(p.id);
+        <div class="text-end">${renderStarsHTML(stars)}</div>
+      </div>`;
+    item.addEventListener("click", () => selectPlace(p.id, false));
     listEl.appendChild(item);
   });
-  
-  updateMapImage(filtered); 
+
+  updateMap(filtered, !!fitMap);
 }
 
-function selectPlace(id) {
+function renderDetails() {
+  const p = db.find(x => x.id === selectedPlaceId);
+  const detailsEl = $("placeDetails");
+  if (!p) { detailsEl.classList.add("d-none"); return; }
+
+  const stars = calculateStars(p);
+  const reviews = (p.reviews || []).slice().sort((a, b) => (b.at || 0) - (a.at || 0));
+
+  const reviewsHTML = reviews.length
+    ? reviews.map(r => `
+        <div class="review-item mb-2">
+          <div class="small"><strong>${esc(r.user)}</strong> <span class="stars-display" style="font-size:.9rem">${"★".repeat(Number(r.note) || 0)}</span></div>
+          ${r.comment ? `<div class="small text-muted">${esc(r.comment)}</div>` : ""}
+        </div>`).join("")
+    : '<p class="small text-muted mb-0">Ainda não há avaliações. Seja o primeiro!</p>';
+
+  $("detailsContent").innerHTML = `
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <h5 class="fw-bold mb-0">${esc(p.name)}</h5>
+      <button type="button" class="btn-close" aria-label="Fechar" id="btnCloseDetails"></button>
+    </div>
+    <p class="text-muted small mb-2">${esc(p.address)}</p>
+    <div class="mb-3">
+      <strong>Acessibilidade:</strong><br>${renderStarsHTML(stars)}
+      <span class="text-muted small">(${reviews.length} avaliações)</span>
+    </div>
+    <button type="button" class="btn btn-success btn-sm w-100 mb-3" id="btnEval">Avaliar este local</button>
+    <h6 class="fw-bold small">Avaliações</h6>
+    <div id="reviewsList">${reviewsHTML}</div>`;
+
+  $("btnCloseDetails").addEventListener("click", () => {
+    selectedPlaceId = null;
+    detailsEl.classList.add("d-none");
+    renderApp(false);
+  });
+  $("btnEval").addEventListener("click", () => openEvalModal(p.id));
+  detailsEl.classList.remove("d-none");
+}
+
+function selectPlace(id, fromMap) {
   selectedPlaceId = id;
   const p = db.find(x => x.id === id);
   if (!p) return;
-
-  const detailsEl = document.getElementById("placeDetails");
-  const contentEl = document.getElementById("detailsContent");
-  detailsEl.classList.remove("d-none");
-  
-  const stars = calculateStars(p);
-  
-  let html = `
-    <div class="d-flex justify-content-between align-items-start mb-2">
-      <h5 class="fw-bold mb-0">${p.name}</h5>
-      <button type="button" class="btn-close" aria-label="Fechar" onclick="document.getElementById('placeDetails').classList.add('d-none'); selectedPlaceId=null; renderApp();"></button>
-    </div>
-    <p class="text-muted small mb-2">${p.address}</p>
-    <div class="mb-3">
-      <strong>Acessibilidade:</strong> <br>${renderStarsHTML(stars)}
-      <span class="text-muted small">(${p.reviews ? p.reviews.length : 0} avaliações)</span>
-    </div>
-    <button class="btn btn-success btn-sm w-100" onclick="openEvalModal('${p.id}')">Avaliar este local</button>
-  `;
-  contentEl.innerHTML = html;
-  
-  renderApp();
+  renderDetails();
+  renderApp(false);
+  if (map) map.panTo([p.lat, p.lng]);
+  // No celular o painel fica abaixo do mapa: leva a tela até ele
+  $("placeDetails").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 // ==========================================
-// 6. EVENTOS E FORMULÁRIOS
+// 7. EVENTOS E FORMULÁRIOS
 // ==========================================
-document.getElementById("searchInput").addEventListener("input", renderApp);
+$("searchInput").addEventListener("input", () => renderApp(true));
 
-document.getElementById("btnGeo").addEventListener("click", () => {
-  const err = document.getElementById("geoError");
-  if (!navigator.geolocation) {
-    err.classList.remove("d-none");
-    return;
-  }
+$("btnGeo").addEventListener("click", () => {
+  const err = $("geoError");
+  hideMsg(err);
+  if (!navigator.geolocation) { showMsg(err, "Seu navegador não suporta localização. Digite manualmente."); return; }
+  if (!window.isSecureContext) { showMsg(err, "A localização só funciona em endereço seguro (https). Digite manualmente."); return; }
   navigator.geolocation.getCurrentPosition(
     pos => {
-      document.getElementById("latInput").value = pos.coords.latitude.toFixed(5);
-      document.getElementById("lngInput").value = pos.coords.longitude.toFixed(5);
-      err.classList.add("d-none");
+      $("latInput").value = pos.coords.latitude.toFixed(5);
+      $("lngInput").value = pos.coords.longitude.toFixed(5);
     },
-    () => err.classList.remove("d-none")
+    () => showMsg(err, "Não foi possível obter a localização. Permita o acesso ou digite manualmente."),
+    { enableHighAccuracy: true, timeout: 10000 }
   );
 });
 
-document.getElementById("formPlace").addEventListener("submit", (e) => {
+$("btnPick").addEventListener("click", () => {
+  if (!map) { showMsg($("geoError"), "O mapa não está disponível. Digite as coordenadas."); return; }
+  pickMode = true;
+  bootstrap.Modal.getOrCreateInstance($("modalPlace")).hide();
+  $("pickHint").classList.remove("d-none");
+  $("map").scrollIntoView({ behavior: "smooth", block: "center" });
+});
+$("btnPickCancel").addEventListener("click", endPick);
+
+$("formPlace").addEventListener("submit", async e => {
   e.preventDefault();
+  const err = $("placeError");
+  hideMsg(err);
   const f = new FormData(e.target);
+  const lat = parseFloat(String(f.get("lat")).replace(",", "."));
+  const lng = parseFloat(String(f.get("lng")).replace(",", "."));
+  if (isNaN(lat) || isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    showMsg(err, "Latitude/longitude inválidas. Exemplo: -20.4697 e -54.6201.");
+    return;
+  }
   const p = {
     id: "p_" + Date.now(),
-    name: f.get("name"),
+    name: String(f.get("name")).trim(),
     cat: f.get("cat"),
-    address: f.get("address"),
-    lat: parseFloat(f.get("lat")),
-    lng: parseFloat(f.get("lng")),
+    address: String(f.get("address")).trim(),
+    lat, lng,
     reviews: []
   };
-  db.push(p);
-  saveData();
-  bootstrap.Modal.getInstance(document.getElementById('modalPlace')).hide();
-  e.target.reset();
-  renderApp();
-  selectPlace(p.id);
+  const btn = $("btnSavePlace");
+  btn.disabled = true;
+  try {
+    await addPlace(p);
+    bootstrap.Modal.getOrCreateInstance($("modalPlace")).hide();
+    e.target.reset();
+    $("latInput").value = "-20.4697";
+    $("lngInput").value = "-54.6201";
+    selectedPlaceId = p.id;
+    if (!cloud) selectPlace(p.id, false);
+  } catch (ex) {
+    console.error(ex);
+    showMsg(err, "Não foi possível salvar o local. Tente novamente.");
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 function openEvalModal(id) {
-  document.getElementById("evalPlaceId").value = id;
-  const form = document.getElementById("formEval");
-  form.reset();
-  
-  const container = document.getElementById("criteriaContainer");
-  container.innerHTML = CRITERIA.map(c => `
+  $("evalPlaceId").value = id;
+  $("formEval").reset();
+  hideMsg($("noteError"));
+  hideMsg($("evalError"));
+
+  $("criteriaContainer").innerHTML = CRITERIA.map(c => `
     <div class="mb-2">
-      <label class="form-label mb-1">${c.t}</label>
-      <select name="${c.k}" class="form-select form-select-sm">
+      <label class="form-label mb-1" for="crit_${c.k}">${c.t}</label>
+      <select id="crit_${c.k}" name="${c.k}" class="form-select form-select-sm">
         <option value="blank">Não observei</option>
         <option value="y">Sim</option>
         <option value="n">Não</option>
-        ${c.canBeNA ? `<option value="na">Não se aplica</option>` : ''}
+        ${c.canBeNA ? '<option value="na">Não se aplica</option>' : ''}
       </select>
-    </div>
-  `).join("");
-  
-  new bootstrap.Modal(document.getElementById('modalEval')).show();
+    </div>`).join("");
+
+  bootstrap.Modal.getOrCreateInstance($("modalEval")).show();
 }
 
-document.getElementById("formEval").addEventListener("submit", (e) => {
+$("formEval").addEventListener("submit", async e => {
   e.preventDefault();
+  hideMsg($("noteError"));
+  hideMsg($("evalError"));
+
   const f = new FormData(e.target);
-  const id = document.getElementById("evalPlaceId").value;
-  const p = db.find(x => x.id === id);
-  if (!p) return;
+  const user = String(f.get("user") || "").trim();
+  const note = parseInt(f.get("note"), 10);
 
-  const review = {
-    user: f.get("user"),
-    note: parseInt(f.get("note")),
-    comment: f.get("comment"),
-    c: {}
-  };
-  
-  CRITERIA.forEach(c => {
-    review.c[c.k] = f.get(c.k);
-  });
+  if (!user) { showMsg($("evalError"), "Digite seu nome."); $("evalUser").focus(); return; }
+  if (!note) { $("noteError").classList.remove("d-none"); return; }
 
-  if (!p.reviews) p.reviews = [];
-  p.reviews.push(review);
-  saveData();
-  
-  bootstrap.Modal.getInstance(document.getElementById('modalEval')).hide();
-  selectPlace(p.id); 
+  const review = { user, note, comment: String(f.get("comment") || "").trim(), at: Date.now(), c: {} };
+  CRITERIA.forEach(c => { review.c[c.k] = f.get(c.k) || "blank"; });
+
+  const btn = $("btnSaveEval");
+  btn.disabled = true;
+  try {
+    await addReview($("evalPlaceId").value, review);
+    bootstrap.Modal.getOrCreateInstance($("modalEval")).hide();
+  } catch (ex) {
+    console.error(ex);
+    showMsg($("evalError"), "Não foi possível enviar a avaliação. Verifique a conexão e tente novamente.");
+  } finally {
+    btn.disabled = false;
+  }
 });
 
-// Inicia a aplicação
-renderApp();
+// ==========================================
+// 8. INÍCIO
+// ==========================================
+initMap();
+if (cloudConfigured) startCloudMode();
+else startLocalMode();
 </script>
 
 </body>
