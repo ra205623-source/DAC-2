@@ -1,781 +1,526 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ConectaPCD - Acessibilidade em Campo Grande</title>
-<!-- Bootstrap 5 CSS -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<!-- Bootstrap Icons -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-<style>
-  :root {
-    --primary-color: #0B6B63;
-    --primary-hover: #08524c;
-    --bg-color: #F4F7F6;
-    --accent-color: #FFC107;
-  }
-  body {
-    background-color: var(--bg-color);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>ConectaPCD - Campo Grande</title>
   
-  /* Navbar */
-  .navbar-custom { background-color: var(--primary-color) !important; }
-  .navbar-brand { font-weight: 800; font-size: 1.5rem; letter-spacing: -0.02em; }
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   
-  /* Buttons */
-  .btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); font-weight: 600; }
-  .btn-primary:hover { background-color: var(--primary-hover); border-color: var(--primary-hover); }
-  .text-primary-custom { color: var(--primary-color) !important; }
-  .bg-primary-custom { background-color: var(--primary-color) !important; }
+  <style>
+    body { background-color: #f8f9fa; display: flex; flex-direction: column; min-height: 100vh; }
+    main { flex-grow: 1; padding-top: 20px; padding-bottom: 20px; }
+    
+    #staticMapImage { 
+      height: 500px; 
+      width: 100%; 
+      object-fit: cover;
+      object-position: center;
+      border-radius: 12px; 
+      border: 2px solid #dee2e6;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      background-color: #e9ecef;
+    }
 
-  /* Map and SVG Styling */
-  .mapbox { 
-    background: #e9ecef url('https://staticmap.openstreetmap.de/staticmap.php?center=-20.4700,-54.6200&zoom=13&size=600x420&maptype=mapnik') center center no-repeat;
-    background-size: cover;
-    border: 1px solid #dee2e6; border-radius: 1rem; 
-    overflow: hidden; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
-  }
-  #map { display: block; width: 100%; height: auto; }
-  .grid line { display: none; /* Hidden to show the real map image clearly */ }
-  
-  /* Map Drop-Pins Fix */
-  .pin { cursor: pointer; outline: none; }
-  .pin-inner { 
-    transform-origin: 0px 0px; /* Origin at the tip of the pin (0,0) */
-    transition: transform 0.2s ease; 
-  }
-  .pin:hover .pin-inner { transform: scale(1.15); }
-  .pin path.b { stroke-width: 2.5; fill: #fff; }
-  .pin text { font: 800 13px system-ui, sans-serif; text-anchor: middle; dominant-baseline: central; stroke: none; }
-  
-  /* Pin Colors by Star Rating */
-  .pin.ok path.b, .pin.ok text { stroke: #198754; fill: #198754; } /* 4-5 stars: Green */
-  .pin.md path.b, .pin.md text { stroke: #fd7e14; fill: #fd7e14; } /* 3 stars: Orange/Yellow */
-  .pin.lo path.b, .pin.lo text { stroke: #dc3545; fill: #dc3545; } /* 1-2 stars: Red */
-  .pin.mu path.b, .pin.mu text { stroke: #6c757d; fill: #6c757d; } /* 0 stars: Gray */
-  
-  .pin circle.ring { fill: var(--accent-color); opacity: 0.4; animation: pulse 2s infinite; }
+    .place-card {
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      border-radius: 10px;
+    }
+    .place-card:hover, .place-card.active {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+      border-color: #0d6efd;
+    }
 
-  @keyframes pulse {
-    0% { transform: scale(0.9); opacity: 0.7; }
-    50% { transform: scale(1.1); opacity: 0.2; }
-    100% { transform: scale(0.9); opacity: 0.7; }
-  }
+    /* Estrelas visuais */
+    .stars-display { color: #ffc107; font-size: 1.1rem; letter-spacing: 2px; }
+    .stars-empty { color: #e4e5e9; }
 
-  /* List Items */
-  .list-group-item { 
-    border-radius: 0.75rem !important; margin-bottom: 0.75rem; 
-    border: 1px solid #dee2e6; border-left: 5px solid transparent; 
-    transition: all 0.2s ease-in-out; cursor: pointer;
-  }
-  .list-group-item:hover { background-color: #f8f9fa; border-color: #ced4da; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.04); }
-  .list-group-item.active-item { border-left-color: var(--primary-color); background-color: #f0f7f6; border-color: #cbe3e1; }
-  .sim-badge { font-size: 0.65rem; background: var(--accent-color); color: #000; padding: 3px 8px; border-radius: 6px; margin-left: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+    /* Sistema de notas em estrelas clicáveis (Avaliação) */
+    .rating-input {
+      display: flex;
+      flex-direction: row-reverse;
+      justify-content: flex-end;
+      gap: 5px;
+    }
+    .rating-input input { display: none; }
+    .rating-input label {
+      font-size: 2rem;
+      color: #e4e5e9;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .rating-input label:hover,
+    .rating-input label:hover ~ label,
+    .rating-input input:checked ~ label {
+      color: #ffc107;
+    }
 
-  /* Star Display Utilities */
-  .star-display { color: #ffc107; white-space: nowrap; }
-
-  /* Details Panel */
-  @media (min-width: 992px) {
-    .sticky-panel { position: sticky; top: 1.5rem; max-height: calc(100vh - 3rem); overflow-y: auto; }
-  }
-  #det::-webkit-scrollbar { width: 6px; }
-  #det::-webkit-scrollbar-track { background: transparent; }
-  #det::-webkit-scrollbar-thumb { background-color: #adb5bd; border-radius: 10px; }
-
-  /* Photos */
-  .ph img { width: 80px; height: 80px; object-fit: cover; border-radius: 0.5rem; border: 1px solid #dee2e6; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: transform 0.2s;}
-  .ph img:hover { transform: scale(1.05); }
-  
-  /* Filter Card */
-  .filter-card { border-radius: 1rem; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-
-  /* 5-Star Rating Component for Input */
-  .star-rating input { display: none; }
-  .star-rating label { cursor: pointer; color: #dee2e6; transition: color 0.2s ease-in-out; }
-  .star-rating label:hover, 
-  .star-rating label:hover ~ label, 
-  .star-rating input:checked ~ label { color: #ffc107; }
-</style>
+    footer {
+      background-color: #212529;
+      color: #adb5bd;
+      text-align: center;
+      padding: 15px 0;
+      font-size: 0.9rem;
+      margin-top: auto;
+    }
+  </style>
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg navbar-dark navbar-custom shadow-sm py-3 mb-4">
-  <div class="container-xl d-flex justify-content-between align-items-center">
-    <div class="d-flex flex-column">
-      <a class="navbar-brand mb-0 text-white d-flex align-items-center" href="#">
-        <i class="bi bi-universal-access-circle fs-2 me-2 text-warning"></i>ConectaPCD
-      </a>
-      <span class="text-white-50 small d-none d-sm-block fw-medium">Mapeamento de Acessibilidade em Campo Grande/MS</span>
-    </div>
-    <button type="button" class="btn btn-light text-primary-custom fw-bold shadow-sm rounded-pill px-3 px-md-4 py-2" id="addBtn">
-      <i class="bi bi-plus-lg me-1"></i> <span class="d-none d-sm-inline">Cadastrar local</span>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="#">ConectaPCD</a>
+    <button class="btn btn-light fw-bold" data-bs-toggle="modal" data-bs-target="#modalPlace">
+      + Cadastrar Local
     </button>
   </div>
 </nav>
 
-<main class="container-xl mb-5">
-  <!-- Filters Panel -->
-  <div class="card filter-card mb-4 bg-white">
-    <div class="card-body p-3 p-md-4">
-      <form id="filtros" role="search" class="row g-3 align-items-end">
-        <div class="col-md-5">
-          <label for="q" class="form-label fw-bold text-secondary small"><i class="bi bi-search me-1"></i> Buscar Local</label>
-          <input id="q" type="search" class="form-control form-control-lg bg-light border-0" placeholder="Ex: Parque das Nações..." autocomplete="off">
-        </div>
-        <div class="col-md-3">
-          <label for="cat" class="form-label fw-bold text-secondary small"><i class="bi bi-tag-fill me-1"></i> Categoria</label>
-          <select id="cat" class="form-select form-select-lg bg-light border-0"></select>
-        </div>
-        <div class="col-md-4">
-          <label for="nd" class="form-label fw-bold text-secondary small"><i class="bi bi-person-wheelchair me-1"></i> Necessidade Específica</label>
-          <select id="nd" class="form-select form-select-lg bg-light border-0"></select>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 id="count" class="text-dark fw-bold mb-0" aria-live="polite"></h5>
-  </div>
-
+<main class="container">
   <div class="row g-4">
-    <!-- Left Column: Map & List -->
-    <div class="col-lg-7 col-xl-7">
-      <div class="mapbox mb-2">
-        <svg id="map" viewBox="0 0 600 420" role="group" aria-label="Mapa esquemático de Campo Grande com os locais cadastrados"></svg>
-      </div>
-      <p class="text-muted small mb-4 ms-2 fw-medium"><i class="bi bi-info-circle-fill me-1 text-primary-custom"></i>Mapa esquemático: representação visual aproximada.</p>
-      
-      <div class="list-group list-group-flush border-0 pe-1" id="list">
-        <!-- Rendered via JS -->
-      </div>
+    <!-- Coluna do Mapa -->
+    <div class="col-lg-7">
+      <img src="" id="staticMapImage" alt="Mapa de Campo Grande com pins de avaliação numerados">
+      <p class="text-muted small mt-2">Os números no mapa correspondem aos números da lista ao lado. (Verde = Bom, Amarelo = Regular, Vermelho = Ruim).</p>
     </div>
-    
-    <!-- Right Column: Details Panel -->
-    <div class="col-lg-5 col-xl-5">
-      <aside id="det" class="card shadow-sm border-0 rounded-4 sticky-panel bg-white" aria-label="Detalhes do local">
-        <!-- Rendered via JS -->
-      </aside>
+
+    <!-- Coluna da Lista e Detalhes -->
+    <div class="col-lg-5 d-flex flex-column" style="max-height: 600px;">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <input type="text" id="searchInput" class="form-control" placeholder="Buscar local, endereço ou categoria...">
+        </div>
+      </div>
+      
+      <!-- Detalhes do Local (Oculto por padrão) -->
+      <div id="placeDetails" class="card shadow-sm border-primary d-none mb-3 flex-shrink-0">
+        <div class="card-body" id="detailsContent">
+          <!-- Injetado via JS -->
+        </div>
+      </div>
+
+      <!-- Lista de Locais -->
+      <div class="flex-grow-1 overflow-auto pe-2" id="placesList">
+        <!-- Injetado via JS -->
+      </div>
     </div>
   </div>
 </main>
 
-<footer class="container-xl mt-5 py-4 border-top text-center text-secondary">
-  <p class="small mb-2 fw-medium">Os locais marcados como simulados são exemplos fictícios ou dados pré-carregados para demonstração.<br>Cadastros e avaliações são salvos globalmente em tempo real via Firebase e ficam visíveis para todos os usuários.</p>
-  <p class="small fw-bold text-muted mb-3">desenvolvido por Giovanni Caio e Jhayson e Eduardo</p>
-  <button type="button" class="btn btn-link btn-sm text-decoration-none fw-bold text-danger" id="reset">
-    <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar base de dados inicial
-  </button>
+<footer>
+  <div class="container">
+    <p class="mb-0">desenvolvido por Giovanni Caio e Jhayson e Eduardo</p>
+  </div>
 </footer>
 
 <!-- Modal: Cadastrar Local -->
-<div class="modal fade" id="dPlace" tabindex="-1" aria-labelledby="tPlace" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-    <form id="fPlace" class="modal-content border-0 shadow-lg rounded-4">
-      <div class="modal-header border-bottom-0 pt-4 px-4 pb-0">
-        <h5 class="modal-title fw-bold fs-4" id="tPlace"><i class="bi bi-geo-alt-fill me-2 text-primary-custom"></i>Novo Local</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<div class="modal fade" id="modalPlace" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">Novo Local</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body px-4 pt-3">
-        <div class="mb-3">
-          <label class="form-label fw-bold small text-secondary">Seu Nome</label>
-          <input name="user" class="form-control bg-light border-0" required maxlength="60" autocomplete="name">
-        </div>
-        <div class="mb-3">
-          <label class="form-label fw-bold small text-secondary">Nome do Local</label>
-          <input name="name" class="form-control bg-light border-0" required maxlength="80">
-        </div>
-        <div class="row g-3 mb-3">
-          <div class="col-md-5">
-            <label class="form-label fw-bold small text-secondary">Categoria</label>
-            <select name="cat" id="catF" class="form-select bg-light border-0"></select>
+      <div class="modal-body">
+        <form id="formPlace">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Nome do local</label>
+            <input type="text" name="name" class="form-control" required>
           </div>
-          <div class="col-md-7">
-            <label class="form-label fw-bold small text-secondary">Endereço</label>
-            <input name="address" class="form-control bg-light border-0" required maxlength="120">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Categoria</label>
+            <select name="cat" class="form-select" required>
+              <option value="Espaço público">Espaço público</option>
+              <option value="Shopping/Comércio">Shopping/Comércio</option>
+              <option value="Restaurante">Restaurante</option>
+              <option value="Saúde">Saúde</option>
+              <option value="Outros">Outros</option>
+            </select>
           </div>
-        </div>
-        <div class="row g-3 mb-3">
-          <div class="col-6">
-            <label class="form-label fw-bold small text-secondary">Latitude</label>
-            <input name="lat" id="lat" class="form-control bg-light border-0 font-monospace" inputmode="decimal" value="-20.4697" required>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Endereço</label>
+            <input type="text" name="address" class="form-control" required>
           </div>
-          <div class="col-6">
-            <label class="form-label fw-bold small text-secondary">Longitude</label>
-            <input name="lng" id="lng" class="form-control bg-light border-0 font-monospace" inputmode="decimal" value="-54.6201" required>
+          <div class="row mb-3">
+            <div class="col-6">
+              <label class="form-label fw-bold">Latitude</label>
+              <input type="text" id="latInput" name="lat" class="form-control" value="-20.4697" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-bold">Longitude</label>
+              <input type="text" id="lngInput" name="lng" class="form-control" value="-54.6201" required>
+            </div>
           </div>
-        </div>
-        <button type="button" class="btn btn-outline-secondary w-100 fw-bold border-2" id="geo">
-          <i class="bi bi-crosshair me-2"></i>Pegar Minha Localização
-        </button>
-        <p class="text-danger small mb-0 fw-bold mt-2 text-center" id="ePlace" role="alert"></p>
+          <button type="button" class="btn btn-outline-secondary w-100" id="btnGeo">
+            📍 Usar minha localização atual
+          </button>
+          <div id="geoError" class="text-danger small mt-2 d-none">Não foi possível obter a localização. Digite manualmente.</div>
+        </form>
       </div>
-      <div class="modal-footer border-top-0 px-4 pb-4 pt-2">
-        <button type="button" class="btn btn-light fw-bold" data-bs-dismiss="modal">Cancelar</button>
-        <button type="submit" class="btn btn-primary fw-bold px-4">Salvar Local</button>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" form="formPlace" class="btn btn-primary">Salvar Local</button>
       </div>
-    </form>
+    </div>
   </div>
 </div>
 
-<!-- Modal: Avaliar -->
-<div class="modal fade" id="dEval" tabindex="-1" aria-labelledby="tEval" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-    <form id="fEval" class="modal-content border-0 shadow-lg rounded-4">
-      <div class="modal-header bg-light border-bottom-0 py-3 px-4 rounded-top-4">
-        <h5 class="modal-title fw-bold fs-5" id="tEval"><i class="bi bi-star-fill me-2 text-warning"></i>Avaliar Acessibilidade</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<!-- Modal: Avaliar Local -->
+<div class="modal fade" id="modalEval" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">Avaliar Acessibilidade</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
-      
-      <div class="modal-body px-4 py-4">
-        <div class="alert alert-info border-0 bg-info bg-opacity-10 d-flex align-items-center mb-4">
-          <i class="bi bi-info-circle-fill fs-4 text-info me-3"></i>
-          <small class="fw-medium text-dark">
-            <strong>Atenção ao critério rigoroso:</strong> Apenas critérios marcados como "Sim" aumentam a nota. Itens deixados "Em branco" são considerados como ausentes e derrubam a nota! Se o local não precisa de algo, marque <strong>"Não se aplica"</strong>.
-          </small>
-        </div>
+      <div class="modal-body">
+        <form id="formEval">
+          <input type="hidden" id="evalPlaceId">
+          
+          <div class="mb-3">
+            <label class="form-label fw-bold">Seu Nome</label>
+            <input type="text" name="user" class="form-control" required placeholder="Como deseja ser identificado">
+          </div>
 
-        <div class="mb-4">
-          <label class="form-label fw-bold small text-secondary">Seu Nome</label>
-          <input name="user" class="form-control form-control-lg bg-light border-0" required maxlength="60" autocomplete="name">
-        </div>
-        
-        <h6 class="fw-bold mb-3 text-dark border-bottom pb-2"><i class="bi bi-card-checklist me-2 text-primary-custom"></i>Critérios de Acessibilidade</h6>
-        <div id="critF" class="row g-3 mb-4"></div>
-        
-        <h6 class="fw-bold mb-3 text-dark border-bottom pb-2"><i class="bi bi-chat-right-text-fill me-2 text-primary-custom"></i>Avaliação Geral</h6>
-        <div class="row g-3 mb-3 align-items-center">
-          <div class="col-md-5">
-            <label class="form-label fw-bold small text-secondary mb-1">Nota de Experiência</label>
-            <!-- Sistema de 5 estrelas iterativo com CSS row-reverse e ~ selector -->
-            <div class="star-rating fs-1 d-flex flex-row-reverse justify-content-end gap-1">
-              <input type="radio" id="star5" name="note" value="5" checked><label for="star5" class="bi bi-star-fill" title="5 estrelas"></label>
-              <input type="radio" id="star4" name="note" value="4"><label for="star4" class="bi bi-star-fill" title="4 estrelas"></label>
-              <input type="radio" id="star3" name="note" value="3"><label for="star3" class="bi bi-star-fill" title="3 estrelas"></label>
-              <input type="radio" id="star2" name="note" value="2"><label for="star2" class="bi bi-star-fill" title="2 estrelas"></label>
-              <input type="radio" id="star1" name="note" value="1"><label for="star1" class="bi bi-star-fill" title="1 estrela"></label>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Nota Geral (Estrelas)</label>
+            <div class="rating-input">
+              <input type="radio" id="star5" name="note" value="5" required><label for="star5">★</label>
+              <input type="radio" id="star4" name="note" value="4"><label for="star4">★</label>
+              <input type="radio" id="star3" name="note" value="3"><label for="star3">★</label>
+              <input type="radio" id="star2" name="note" value="2"><label for="star2">★</label>
+              <input type="radio" id="star1" name="note" value="1"><label for="star1">★</label>
             </div>
           </div>
-          <div class="col-md-7">
-            <label class="form-label fw-bold small text-secondary mb-1">Adicionar Fotos (Até 3)</label>
-            <input name="photos" type="file" class="form-control bg-light border-0" accept="image/*" multiple>
+
+          <hr>
+          <h6 class="fw-bold text-success mb-3">Critérios Específicos</h6>
+          <p class="small text-muted mb-3">Deixar como "Não observei" diminui a nota do local. Use "Não se aplica" para itens que não fazem sentido no local.</p>
+          
+          <div id="criteriaContainer">
+            <!-- Gerado via JS -->
           </div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label fw-bold small text-secondary">Comentário Adicional</label>
-          <textarea name="comment" class="form-control bg-light border-0" maxlength="400" rows="3" placeholder="Conte como foi sua experiência, detalhes dos obstáculos ou facilidades..."></textarea>
-        </div>
-        <p class="text-danger small mb-0 fw-bold text-center mt-2" id="eEval" role="alert"></p>
+          
+          <div class="mb-3 mt-3">
+            <label class="form-label fw-bold">Comentário (opcional)</label>
+            <textarea name="comment" class="form-control" rows="2"></textarea>
+          </div>
+        </form>
       </div>
-      
-      <div class="modal-footer bg-light border-top-0 px-4 py-3 rounded-bottom-4">
-        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cancelar</button>
-        <button type="submit" class="btn btn-primary fw-bold px-4">Enviar Avaliação</button>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" form="formEval" class="btn btn-success">Enviar Avaliação</button>
       </div>
-    </form>
+    </div>
   </div>
 </div>
 
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-const $ = s => document.querySelector(s);
+<script>
+// ==========================================
+// 1. CONFIGURAÇÕES E CRITÉRIOS
+// ==========================================
+const STORAGE_KEY = "conectapcd_v3_cg";
 
-// Definição dos critérios
-const CR = [
-  {k:"entrada", t:"Entrada sem degraus", n:["f"]},
-  {k:"rampa", t:"Rampa de acesso", n:["f"]},
-  {k:"banheiro", t:"Banheiro acessível", n:["f"]},
-  {k:"circ", t:"Espaço para circular livremente", n:["f"]},
-  {k:"piso", t:"Piso tátil", n:["v"]},
-  {k:"braile", t:"Informações em braile", n:["v"]},
-  {k:"sinal", t:"Sinalização visual clara", n:["a","i"]},
-  {k:"libras", t:"Atendimento em Libras", n:["a"]},
-  {k:"caa", t:"Comunicação alternativa", n:["i"]}
-];
-const ND = {f:"Física", v:"Visual", a:"Auditiva", i:"Intelectual"};
-const CATS = ["Parques e Natureza", "Compras e Lazer", "Gastronomia e Cultura", "Saúde", "Educação", "Órgão público"];
-const B = {lng0:-54.68, lng1:-54.56, lat0:-20.52, lat1:-20.42};
-const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-
-// Seed Data for Campo Grande
-const SEED = [
-  ["Bioparque Pantanal", "Parques e Natureza", "Av. Afonso Pena, s/n", -20.454, -54.582, "yyyyyyyyy", 5],
-  ["Parque das Nações Indígenas", "Parques e Natureza", "Altos da Afonso Pena", -20.456, -54.585, "yayy-n-n-", 4], 
-  ["Praça Esportiva Belmar Fidalgo", "Parques e Natureza", "R. Dom Aquino, 2536", -20.460, -54.612, "yayy-n---", 4],
-  ["Horto Florestal", "Parques e Natureza", "Av. Ernesto Geisel, s/n", -20.472, -54.618, "yay-n----", 3],
-  ["Shopping Campo Grande", "Compras e Lazer", "Av. Afonso Pena, 4909", -20.452, -54.593, "yyyyyyyy-", 5],
-  ["Shopping Bosque dos Ipês", "Compras e Lazer", "Av. Cônsul Assaf Trad, 4796", -20.410, -54.568, "yyyyyyyy-", 5],
-  ["Shopping Pátio Central", "Compras e Lazer", "R. Marechal Rondon, 1380", -20.462, -54.616, "yyyyyyyy-", 4],
-  ["Mercadão Municipal de Campo Grande", "Compras e Lazer", "R. Sete de Setembro, 65", -20.468, -54.621, "yyyy-----", 3],
-  ["Casa do Peixe", "Gastronomia e Cultura", "R. Dr. João Rosa Píres, 1030", -20.461, -54.623, "yayy-----", 4], 
-  ["Sesc Cultura", "Gastronomia e Cultura", "Av. Afonso Pena, 2270", -20.463, -54.610, "yyyyy-y--", 4],
-  ["Feira Central", "Gastronomia e Cultura", "R. 14 de Julho, 3351", -20.451, -54.618, "yayy-----", 4]
+const CRITERIA = [
+  {k:"degrau", t:"Entrada sem degraus", canBeNA: true},
+  {k:"rampa", t:"Possui Rampa", canBeNA: true},
+  {k:"banheiro", t:"Banheiro adaptado", canBeNA: false},
+  {k:"circ", t:"Espaço p/ circular de cadeira", canBeNA: false},
+  {k:"tátil", t:"Piso tátil", canBeNA: false},
+  {k:"braile", t:"Informações em braile", canBeNA: false},
+  {k:"libras", t:"Atendimento em Libras", canBeNA: false}
 ];
 
-function review(str, note){
-  const c = {};
-  CR.forEach((x,i) => {
-    const val = str[i];
-    if (val === 'y') c[x.k] = 'y';
-    else if (val === 'n') c[x.k] = 'n';
-    else if (val === 'a') c[x.k] = 'na';
-    else if (val === '-') c[x.k] = '';
-  });
-  return {user:"Equipe ConectaPCD", date:new Date().toISOString().slice(0, 10), note: note || 4, comment:"Avaliação consolidada inicial.", photos:[], c};
+// Dados iniciais
+const SEED_DATA = [
+  {
+    id: "cg_1", name: "Bioparque Pantanal", cat: "Espaço público", address: "Altos da Afonso Pena", 
+    lat: -20.4534, lng: -54.5828,
+    reviews: [{
+      user: "Equipe Conecta", note: 5, comment: "Referência.",
+      c: { "degrau": "y", "rampa": "na", "banheiro": "y", "circ": "y", "tátil": "y", "braile": "y", "libras": "y" }
+    }]
+  },
+  {
+    id: "cg_2", name: "Parque das Nações Indígenas", cat: "Espaço público", address: "Av. Afonso Pena", 
+    lat: -20.4578, lng: -54.5862,
+    reviews: [{
+      user: "Avaliador", note: 4, comment: "Boas rampas.",
+      c: { "degrau": "y", "rampa": "y", "banheiro": "y", "circ": "y", "tátil": "n", "braile": "n", "libras": "n" }
+    }]
+  },
+  {
+    id: "cg_3", name: "Shopping Campo Grande", cat: "Shopping/Comércio", address: "Av. Afonso Pena", 
+    lat: -20.4552, lng: -54.5960,
+    reviews: [{
+      user: "Visitante", note: 5, comment: "Excelente.",
+      c: { "degrau": "y", "rampa": "y", "banheiro": "y", "circ": "y", "tátil": "y", "braile": "n", "libras": "n" }
+    }]
+  },
+  {
+    id: "cg_4", name: "Mercadão Municipal", cat: "Shopping/Comércio", address: "R. 7 de Setembro", 
+    lat: -20.4690, lng: -54.6183,
+    reviews: [{
+      user: "Visitante", note: 3, comment: "Corredores apertados.",
+      c: { "degrau": "y", "rampa": "y", "banheiro": "y", "circ": "n", "tátil": "n", "braile": "n", "libras": "n" }
+    }]
+  }
+];
+
+// ==========================================
+// 2. BANCO DE DADOS
+// ==========================================
+let db = [];
+try {
+  const local = localStorage.getItem(STORAGE_KEY);
+  db = local ? JSON.parse(local) : SEED_DATA;
+} catch (e) {
+  db = SEED_DATA;
 }
 
-function seed(){
-  return {
-    places:SEED.map((s,i) => ({
-      id:"s"+i, name:s[0], cat:s[1], address:s[2], lat:s[3], lng:s[4], sim:true, 
-      reviews:[review(s[5], s[6])]
-    }))
-  };
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 }
 
-// Global Variables
-let db = { user: localStorage.getItem("conectapcd:user") || "", places: [] };
-let sel = null, armed = false;
-let fsdb, auth, placesRef, currentUser;
-
-// Initialize Firebase
-async function initFirebase() {
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'conectapcd-default';
-  const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+// ==========================================
+// 3. LÓGICA DE CÁLCULO E ESTRELAS
+// ==========================================
+function calculateStars(place) {
+  if (!place.reviews || place.reviews.length === 0) return 0;
   
-  const app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  fsdb = getFirestore(app);
-  placesRef = collection(fsdb, 'artifacts', appId, 'public', 'data', 'places');
+  let totalPoints = 0;
+  let totalApplicable = 0;
+  let manualStarsSum = 0;
 
-  const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-  try {
-    if (token) {
-      await signInWithCustomToken(auth, token);
-    } else {
-      await signInAnonymously(auth);
-    }
-    currentUser = auth.currentUser;
-    if (!currentUser) return;
-    
-    // Listen for real-time global changes
-    onSnapshot(placesRef, (snapshot) => {
-      if (snapshot.empty) {
-        seedFirebase();
-      } else {
-        db.places = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        render();
-        if (sel) detail(); // Refresh active selection if available
+  place.reviews.forEach(rev => {
+    manualStarsSum += Number(rev.note);
+    CRITERIA.forEach(crit => {
+      const answer = rev.c[crit.k];
+      if (answer === "na") return; 
+      
+      totalApplicable++;
+      if (answer === "y") {
+        totalPoints++;
       }
-    }, (error) => {
-      console.error("Firebase Error:", error);
     });
-  } catch (err) {
-    console.error("Auth Error:", err);
-  }
-}
-
-async function seedFirebase() {
-  if (!currentUser) return;
-  const defaultPlaces = seed().places;
-  for (const p of defaultPlaces) {
-    const { id, ...data } = p;
-    await setDoc(doc(placesRef, id), data);
-  }
-}
-
-// Lógica de cálculo rigorosa (penaliza itens deixados em branco, ignora "Não se aplica")
-function score(p, need){
-  const applicable = CR.filter(x => !need || x.n.includes(need));
-  if (applicable.length === 0 || p.reviews.length === 0) return null;
-
-  let totalReviewScores = 0;
-  let validReviews = 0;
-
-  p.reviews.forEach(r => {
-    let yesCount = 0;
-    let naCount = 0;
-    
-    applicable.forEach(x => {
-      const val = r.c[x.k];
-      if (val === 'y') yesCount++;
-      else if (val === 'na') naCount++;
-    });
-    
-    const denominator = applicable.length - naCount;
-    if (denominator > 0) {
-      totalReviewScores += (yesCount / denominator);
-      validReviews++;
-    }
   });
 
-  return validReviews > 0 ? (totalReviewScores / validReviews) : null;
-}
-
-// Mapeamento de pontuação (0 a 1) para 1 a 5 estrelas
-function getStarObj(s) {
-  let st = 0;
-  if (s !== null) {
-    st = s === 0 ? 1 : Math.min(5, Math.max(1, Math.round(s * 5)));
+  if (totalApplicable === 0) {
+    return Math.round(manualStarsSum / place.reviews.length);
   }
 
-  let mc = "mu", c = "secondary";
-  if (st >= 4) { mc = "ok"; c = "success"; } 
-  else if (st === 3) { mc = "md"; c = "warning text-dark"; } 
-  else if (st > 0) { mc = "lo"; c = "danger"; }
-  
-  const html = st === 0 
-    ? `<span class="text-secondary small fw-medium"><i class="bi bi-dash-circle me-1"></i>Sem dados</span>`
-    : `<span class="star-display fs-6">` + '<i class="bi bi-star-fill"></i>'.repeat(st) + '<i class="bi bi-star text-muted opacity-25"></i>'.repeat(5-st) + `</span>`;
-    
-  return { st, mc, c, html };
+  const percentage = totalPoints / totalApplicable;
+  let calcStars = Math.round((percentage * 4) + 1);
+  return calcStars;
 }
 
-function visible(){
-  const q = $("#q").value.trim().toLowerCase(), cat = $("#cat").value, nd = $("#nd").value;
-  let L = db.places.filter(p => (!q || (p.name + " " + p.address + " " + p.cat).toLowerCase().includes(q)) && (!cat || p.cat === cat));
-  if (nd) {
-    L = L.filter(p => { const s = score(p, nd); return s !== null; });
-    L.sort((a, b) => score(b, nd) - score(a, nd));
+function renderStarsHTML(stars) {
+  if (stars === 0) return '<span class="text-muted small">Sem avaliações</span>';
+  let html = '<span class="stars-display">';
+  for (let i = 1; i <= 5; i++) {
+    html += i <= stars ? '★' : '<span class="stars-empty">★</span>';
   }
-  return L;
+  html += '</span>';
+  return html;
 }
 
-function mapSvg(L, nd){
-  let g = "";
-  for (let i = 1; i < 10; i++) g += `<line x1="${i*60}" y1="0" x2="${i*60}" y2="420"/>`;
-  for (let i = 1; i < 7; i++) g += `<line x1="0" y1="${i*60}" x2="600" y2="${i*60}"/>`;
-  let out = `<g class="grid">${g}</g>`;
-  
-  L.forEach(p => {
-    const lng = Math.min(B.lng1, Math.max(B.lng0, p.lng)), lat = Math.min(B.lat1, Math.max(B.lat0, p.lat));
-    const x = 30 + (lng - B.lng0) / (B.lng1 - B.lng0) * 540, y = 30 + (B.lat1 - lat) / (B.lat1 - B.lat0) * 360;
-    
-    const l = getStarObj(score(p, nd || null));
-    const iconStr = l.st > 0 ? `${l.st}★` : '?';
-    
-    // Drop-pin fixo pela base (0,0) na âncora do pin-inner para prevenir Jitter (tremor)
-    out += `<g class="pin ${l.mc}" data-id="${p.id}" tabindex="0" role="button" aria-label="${esc(p.name)}, ${l.st > 0 ? l.st + ' estrelas' : 'sem dados'}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">`
-      + `<g class="pin-inner">`
-      + (p.id === sel ? `<circle class="ring" cx="0" cy="-28" r="25"/>` : "")
-      + `<path class="b" d="M 0 0 C -12 -15 -16 -22 -16 -30 A 16 16 0 1 1 16 -30 C 16 -22 12 -15 0 0 Z"/>`
-      + `<text y="-31">${iconStr}</text>`
-      + `</g></g>`;
-  });
-  return out;
-}
-
-function render(){
-  const L = visible(), nd = $("#nd").value;
-  $("#count").innerHTML = `<span class="badge bg-dark rounded-pill px-3 py-2 fs-6 shadow-sm">${L.length}</span> locais encontrados` 
-    + (nd ? ` <span class="text-secondary fw-normal fs-6">para a necessidade ${ND[nd]}</span>` : "");
-    
-  $("#map").innerHTML = mapSvg(L, nd);
-  
-  $("#list").innerHTML = L.length ? L.map(p =>
-    `<div role="button" tabindex="0" class="list-group-item d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center p-3 gap-2 ${p.id === sel ? "active-item" : ""}" data-id="${p.id}">
-      <div>
-        <h6 class="mb-1 fw-bold text-dark fs-5">${esc(p.name)}${p.sim ? '<span class="sim-badge align-text-top">Simulado</span>' : ""}</h6>
-        <div class="text-secondary small fw-medium"><i class="bi bi-geo-alt-fill text-muted me-1"></i>${esc(p.cat)} &middot; ${esc(p.address)}</div>
-      </div>
-      <div class="mt-2 mt-sm-0">${getStarObj(score(p, nd || null)).html}</div>
-    </div>`
-  ).join("") : `<div class="p-5 text-center text-muted border rounded-4 bg-white shadow-sm"><i class="bi bi-search fs-1 d-block mb-3 text-secondary opacity-50"></i>Nenhum local encontrado para os filtros atuais.</div>`;
-  
-  detail();
-}
-
-function detail(){
-  const p = db.places.find(x => x.id === sel), el = $("#det");
-  if (!p) { 
-    el.innerHTML = `<div class="card-body text-center text-muted p-5 d-flex flex-column align-items-center justify-content-center h-100 min-vh-50"><i class="bi bi-pin-map-fill fs-1 d-block mb-3 text-primary-custom opacity-25" style="font-size: 4rem !important;"></i><h5 class="fw-bold text-dark">Nenhum local selecionado</h5><p class="mb-0">Clique em um marcador no mapa ou em um item da lista para visualizar os detalhes de acessibilidade.</p></div>`; 
-    return; 
-  }
-  
-  const critStats = CR.map(x => {
-    let y = 0, n = 0, na = 0, b = 0, totalRev = p.reviews.length;
-    p.reviews.forEach(r => { 
-      const val = r.c[x.k];
-      if (val === 'y') y++; else if (val === 'n') n++; else if (val === 'na') na++; else b++;
-    });
-    return {x, y, n, na, b, totalRev};
-  });
-
-  const ph = p.reviews.flatMap(r => r.photos.map(s => ({s, u:r.user})));
-  const nRev = p.reviews.length;
-  
-  let h = `<div class="card-header bg-white pb-3 pt-4 px-4 border-bottom">
-    <h3 tabindex="-1" class="fw-bolder mb-1 text-dark">${esc(p.name)}${p.sim ? '<span class="sim-badge align-middle">Simulado</span>' : ""}</h3>
-    <p class="text-secondary mb-3 fw-medium"><i class="bi bi-tag-fill me-1"></i>${esc(p.cat)} &nbsp;&bull;&nbsp; <i class="bi bi-geo-alt-fill me-1"></i>${esc(p.address)}</p>
-    <div class="d-flex align-items-center flex-wrap gap-2 bg-light p-2 rounded-3 border">
-      <span class="fw-bold text-secondary me-2">Nota Geral:</span> ${getStarObj(score(p, null)).html} <span class="text-secondary small fw-bold ms-auto">(${nRev} avaliaç${nRev === 1 ? 'ão' : 'ões'})</span>
-    </div>
-  </div>
-  <div class="card-body px-4 pb-4 pt-4">`;
-  
-  h += `<h6 class="fw-bold mb-3 text-dark text-uppercase" style="letter-spacing: 0.5px;"><i class="bi bi-star-half me-2 text-primary-custom"></i>Estrelas por Necessidade</h6><div class="mb-4 bg-light px-3 py-2 rounded-4 border">`;
-  h += Object.keys(ND).map(k => { 
-    return `<div class="d-flex align-items-center justify-content-between py-2 border-bottom last-border-0" style="border-bottom-color: #dee2e6 !important;">
-      <div class="fw-bold text-secondary small">${ND[k]}</div>
-      <div>${getStarObj(score(p, k)).html}</div>
-    </div>`; 
-  }).join("");
-  h += `</div>`;
-
-  h += `<h6 class="fw-bold mb-3 text-dark text-uppercase" style="letter-spacing: 0.5px;"><i class="bi bi-ui-checks-grid me-2 text-primary-custom"></i>Critérios Observados</h6><div class="row g-2 mb-4">`;
-  h += critStats.map(c => {
-    let status = "Sem dados", icon = '<i class="bi bi-dash-circle-dotted text-secondary fs-5"></i>', textClass="text-secondary";
-    if (c.y > 0 || c.n > 0 || c.na > 0 || c.b > 0) {
-      if (c.na >= c.y && c.na >= c.n && c.na > c.b) { status = "Não se aplica"; icon = '<i class="bi bi-slash-circle-fill text-muted fs-5"></i>'; textClass="text-muted"; }
-      else if (c.y >= c.n && c.y > c.b) { status = "Sim"; icon = '<i class="bi bi-check-circle-fill text-success fs-5"></i>'; textClass="text-success"; }
-      else if (c.n > c.y || c.b > c.y) { status = "Não / Em branco"; icon = '<i class="bi bi-x-circle-fill text-danger fs-5"></i>'; textClass="text-danger"; }
-    }
-    
-    return `<div class="col-12 col-sm-6">
-      <div class="border rounded-3 p-2 d-flex align-items-start h-100 bg-white">
-        <span class="mt-1 me-2">${icon}</span>
-        <div>
-          <div class="small fw-bold lh-sm text-dark mb-1">${c.x.t}</div>
-          <div class="small fw-bold ${textClass}" style="font-size:0.75rem">${status}</div>
-        </div>
-      </div>
-    </div>`;
-  }).join("");
-  h += `</div>`;
-
-  if (ph.length) h += `<h6 class="fw-bold mb-3 text-dark text-uppercase"><i class="bi bi-images me-2 text-primary-custom"></i>Fotos do Local</h6><div class="ph mb-4 d-flex flex-wrap gap-2">${ph.slice(0, 6).map(f => `<img src="${f.s}" alt="Foto enviada por ${esc(f.u)}">`).join("")}</div>`;
-
-  h += `<div class="d-flex justify-content-between align-items-center bg-light p-3 rounded-3 border mb-3 mt-4">
-    <h6 class="fw-bold mb-0 text-dark text-uppercase"><i class="bi bi-chat-quote-fill me-2 text-primary-custom"></i>Comentários</h6>
-    <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow fw-bold" id="evalBtn"><i class="bi bi-star-fill me-1"></i>Avaliar Local</button>
-  </div>`;
-  
-  if (nRev) {
-    h += `<div class="d-flex flex-column gap-3">` + p.reviews.slice().reverse().map(r => {
-      const stars = '<i class="bi bi-star-fill text-warning me-1"></i>'.repeat(r.note) + '<i class="bi bi-star text-warning opacity-25 me-1"></i>'.repeat(5-r.note);
-      return `<div class="bg-white p-3 rounded-4 shadow-sm border">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <strong class="text-dark small d-flex align-items-center"><i class="bi bi-person-circle fs-5 me-2 text-secondary"></i>${esc(r.user)}</strong>
-          <span class="text-secondary small fw-medium" style="font-size: 0.75rem;">${esc(r.date)}</span>
-        </div>
-        <div class="mb-2 small">${stars}</div>
-        ${r.comment ? `<div class="small text-secondary lh-sm bg-light p-2 rounded-3 border-start border-3 border-primary">${esc(r.comment)}</div>` : ""}
-      </div>`;
-    }).join("") + `</div>`;
-  } else {
-    h += `<div class="text-center p-4 border rounded-3 bg-light"><p class="text-secondary small fw-medium mb-0">Ninguém avaliou este local ainda. Seja o primeiro a compartilhar sua experiência!</p></div>`;
-  }
-
-  h += `</div>`;
-  el.innerHTML = h.replace(/last-border-0" style="border-bottom-color: #dee2e6 !important;"/g, 'border-bottom-0"');
-}
-
-function choose(id, focus){
-  sel = id; render();
-  if (focus) { 
-    const isMobile = window.innerWidth < 992;
-    if (isMobile) {
-      document.getElementById('det').scrollIntoView({ behavior: 'smooth' });
-    }
-  }
-}
-
-// Inicia Filtros e Formulários
-$("#cat").innerHTML = `<option value="">Todas as categorias</option>` + CATS.map(c => `<option>${c}</option>`).join("");
-$("#catF").innerHTML = CATS.map(c => `<option>${c}</option>`).join("");
-$("#nd").innerHTML = `<option value="">Todas as necessidades</option>` + Object.keys(ND).map(k => `<option value="${k}">${ND[k]}</option>`).join("");
-
-// Gerar o Form de Critérios
-$("#critF").innerHTML = CR.map(x => `
-  <div class="col-md-6">
-    <label class="form-label small fw-bold text-secondary mb-1">${x.t}</label>
-    <select class="form-select bg-white border-0 shadow-sm fw-medium" name="${x.k}">
-      <option value="">Em branco (Penaliza a nota)</option>
-      <option value="y">Sim, possui</option>
-      <option value="n">Não possui</option>
-      <option value="na">Não se aplica</option>
-    </select>
-  </div>`).join("");
-
-["#q","#cat","#nd"].forEach(s => $(s).addEventListener("input", render));
-$("#filtros").addEventListener("submit", e => e.preventDefault());
-
-// Eventos Globais de Clique
-document.addEventListener("click", e => {
-  const evalBtn = e.target.closest("#evalBtn");
-  if (evalBtn) { 
-    e.preventDefault();
-    $("#fEval").user.value = db.user || ""; 
-    $("#eEval").textContent = ""; 
-    bootstrap.Modal.getOrCreateInstance(document.getElementById("dEval")).show(); 
+// ==========================================
+// 4. ATUALIZAR MAPA COM PINS NUMERADOS
+// ==========================================
+function updateMapImage(placesToShow) {
+  if (placesToShow.length === 0) {
+    document.getElementById("staticMapImage").src = "https://static-maps.yandex.ru/1.x/?lang=pt-BR&ll=-54.6201,-20.4697&z=13&l=map&size=600,450";
     return;
   }
   
-  const t = e.target.closest("[data-id]");
-  if (t) {
-    e.preventDefault();
-    choose(t.dataset.id, !t.closest("svg")); 
-  }
-});
+  const baseUrl = "https://static-maps.yandex.ru/1.x/?lang=pt-BR&l=map&size=600,450";
+  
+  const markers = placesToShow.map((p, index) => {
+    const stars = calculateStars(p);
+    let color = "gr"; // cinzento
+    if (stars >= 4) color = "gn"; // verde
+    else if (stars === 3) color = "yw"; // amarelo
+    else if (stars > 0) color = "rd"; // vermelho
+    
+    let markerNumber = index + 1;
+    if (markerNumber > 99) markerNumber = ""; 
+    
+    // CORRIGIDO: O "m" agora vem ANTES do número para montar o marcador certo na API (ex: pm2gnm1)
+    return `${p.lng},${p.lat},pm2${color}m${markerNumber}`;
+  }).join("~");
 
-$("#map").addEventListener("keydown", e => {
-  const t = e.target.closest("[data-id]");
-  if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); choose(t.dataset.id, true); }
-});
+  document.getElementById("staticMapImage").src = `${baseUrl}&pt=${markers}`;
+}
 
-$("#addBtn").addEventListener("click", (e) => { 
-  e.preventDefault();
-  $("#fPlace").user.value = db.user || ""; 
-  $("#ePlace").textContent = ""; 
-  bootstrap.Modal.getOrCreateInstance(document.getElementById("dPlace")).show(); 
-});
+// ==========================================
+// 5. RENDERIZAÇÃO DA LISTA COM NÚMEROS
+// ==========================================
+let selectedPlaceId = null;
 
-$("#geo").addEventListener("click", () => {
-  const btn = $("#geo");
-  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Buscando...`;
-  if (!navigator.geolocation) { 
-    $("#ePlace").textContent = "Navegador não suporta geolocalização."; 
-    btn.innerHTML = `<i class="bi bi-crosshair me-2"></i>Pegar Minha Localização`; 
-    return; 
+function renderApp() {
+  const query = document.getElementById("searchInput").value.toLowerCase();
+  const listEl = document.getElementById("placesList");
+  listEl.innerHTML = "";
+  
+  const filtered = db.filter(p => p.name.toLowerCase().includes(query) || p.address.toLowerCase().includes(query));
+
+  filtered.forEach((p, index) => {
+    const stars = calculateStars(p);
+    const num = index + 1;
+    
+    // Cor da tag (badge) combinando com a cor do pin no mapa
+    let badgeClass = "bg-secondary";
+    if (stars >= 4) badgeClass = "bg-success";
+    else if (stars === 3) badgeClass = "bg-warning text-dark";
+    else if (stars > 0) badgeClass = "bg-danger";
+
+    const item = document.createElement("div");
+    item.className = `card place-card mb-2 ${selectedPlaceId === p.id ? 'active' : ''}`;
+    item.innerHTML = `
+      <div class="card-body p-3 d-flex justify-content-between align-items-center">
+        <div>
+          <h6 class="mb-1 fw-bold">
+            <span class="badge ${badgeClass} me-2 shadow-sm">${num}</span>${p.name}
+          </h6>
+          <small class="text-muted d-block">${p.cat}</small>
+        </div>
+        <div class="text-end">
+          ${renderStarsHTML(stars)}
+        </div>
+      </div>
+    `;
+    item.onclick = () => selectPlace(p.id);
+    listEl.appendChild(item);
+  });
+  
+  updateMapImage(filtered); 
+}
+
+function selectPlace(id) {
+  selectedPlaceId = id;
+  const p = db.find(x => x.id === id);
+  if (!p) return;
+
+  const detailsEl = document.getElementById("placeDetails");
+  const contentEl = document.getElementById("detailsContent");
+  detailsEl.classList.remove("d-none");
+  
+  const stars = calculateStars(p);
+  
+  let html = `
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <h5 class="fw-bold mb-0">${p.name}</h5>
+      <button type="button" class="btn-close" aria-label="Fechar" onclick="document.getElementById('placeDetails').classList.add('d-none'); selectedPlaceId=null; renderApp();"></button>
+    </div>
+    <p class="text-muted small mb-2">${p.address}</p>
+    <div class="mb-3">
+      <strong>Acessibilidade:</strong> <br>${renderStarsHTML(stars)}
+      <span class="text-muted small">(${p.reviews ? p.reviews.length : 0} avaliações)</span>
+    </div>
+    <button class="btn btn-success btn-sm w-100" onclick="openEvalModal('${p.id}')">Avaliar este local</button>
+  `;
+  contentEl.innerHTML = html;
+  
+  renderApp();
+}
+
+// ==========================================
+// 6. EVENTOS E FORMULÁRIOS
+// ==========================================
+document.getElementById("searchInput").addEventListener("input", renderApp);
+
+document.getElementById("btnGeo").addEventListener("click", () => {
+  const err = document.getElementById("geoError");
+  if (!navigator.geolocation) {
+    err.classList.remove("d-none");
+    return;
   }
   navigator.geolocation.getCurrentPosition(
-    pos => { 
-      $("#lat").value = pos.coords.latitude.toFixed(5); 
-      $("#lng").value = pos.coords.longitude.toFixed(5); 
-      $("#ePlace").textContent = ""; 
-      btn.innerHTML = `<i class="bi bi-check-lg me-2 text-success"></i>Localização obtida!`; 
-      setTimeout(()=>btn.innerHTML = `<i class="bi bi-crosshair me-2"></i>Pegar Minha Localização`, 2000);
+    pos => {
+      document.getElementById("latInput").value = pos.coords.latitude.toFixed(5);
+      document.getElementById("lngInput").value = pos.coords.longitude.toFixed(5);
+      err.classList.add("d-none");
     },
-    () => { 
-      $("#ePlace").textContent = "Não foi possível obter a localização. Permita o acesso ou digite manualmente."; 
-      btn.innerHTML = `<i class="bi bi-crosshair me-2"></i>Pegar Minha Localização`; 
-    }
+    () => err.classList.remove("d-none")
   );
 });
 
-// Cadastrar Local - Salva no Firebase
-$("#fPlace").addEventListener("submit", async e => {
+document.getElementById("formPlace").addEventListener("submit", (e) => {
   e.preventDefault();
-  if (!currentUser) return;
-
   const f = new FormData(e.target);
-  const lat = parseFloat(String(f.get("lat")).replace(",", ".")), lng = parseFloat(String(f.get("lng")).replace(",", "."));
-  if (isNaN(lat) || isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) { $("#ePlace").textContent = "Coordenadas inválidas."; return; }
-  
-  db.user = String(f.get("user")).trim();
-  localStorage.setItem("conectapcd:user", db.user);
-  
-  const newId = "u" + Date.now();
-  const p = { name:String(f.get("name")).trim(), cat:f.get("cat"), address:String(f.get("address")).trim(), lat, lng, sim:false, reviews:[] };
-  
-  const btn = e.target.querySelector('button[type="submit"]');
-  btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Salvando...`;
-
-  try {
-    await setDoc(doc(placesRef, newId), p);
-    e.target.reset(); $("#lat").value = "-20.4697"; $("#lng").value = "-54.6201";
-    bootstrap.Modal.getInstance(document.getElementById("dPlace")).hide(); 
-    choose(newId, true);
-  } catch(err) {
-    $("#ePlace").textContent = "Erro ao salvar no servidor em tempo real.";
-  } finally {
-    btn.disabled = false; btn.innerHTML = `Salvar Local`;
-  }
-});
-
-// Helper para diminuir qualidade da foto antes de salvar no doc (limite 1mb)
-const shrink = f => new Promise((ok, no) => {
-  const r = new FileReader();
-  r.onload = () => {
-    const i = new Image();
-    i.onload = () => {
-      const k = Math.min(1, 400 / Math.max(i.width, i.height)), c = document.createElement("canvas");
-      c.width = Math.round(i.width * k); c.height = Math.round(i.height * k);
-      c.getContext("2d").drawImage(i, 0, 0, c.width, c.height);
-      ok(c.toDataURL("image/jpeg", 0.5)); // Compressão agressiva para Firebase
-    };
-    i.onerror = no; i.src = r.result;
+  const p = {
+    id: "p_" + Date.now(),
+    name: f.get("name"),
+    cat: f.get("cat"),
+    address: f.get("address"),
+    lat: parseFloat(f.get("lat")),
+    lng: parseFloat(f.get("lng")),
+    reviews: []
   };
-  r.onerror = no; r.readAsDataURL(f);
+  db.push(p);
+  saveData();
+  bootstrap.Modal.getInstance(document.getElementById('modalPlace')).hide();
+  e.target.reset();
+  renderApp();
+  selectPlace(p.id);
 });
 
-// Enviar Avaliação - Atualiza documento no Firebase
-$("#fEval").addEventListener("submit", async e => {
+function openEvalModal(id) {
+  document.getElementById("evalPlaceId").value = id;
+  const form = document.getElementById("formEval");
+  form.reset();
+  
+  const container = document.getElementById("criteriaContainer");
+  container.innerHTML = CRITERIA.map(c => `
+    <div class="mb-2">
+      <label class="form-label mb-1">${c.t}</label>
+      <select name="${c.k}" class="form-select form-select-sm">
+        <option value="blank">Não observei</option>
+        <option value="y">Sim</option>
+        <option value="n">Não</option>
+        ${c.canBeNA ? `<option value="na">Não se aplica</option>` : ''}
+      </select>
+    </div>
+  `).join("");
+  
+  new bootstrap.Modal(document.getElementById('modalEval')).show();
+}
+
+document.getElementById("formEval").addEventListener("submit", (e) => {
   e.preventDefault();
-  if (!currentUser) return;
-  
-  const f = new FormData(e.target), c = {};
-  
-  CR.forEach(x => { const v = f.get(x.k); if (v !== null) c[x.k] = v; });
-  
-  const hasData = Object.values(c).some(val => val !== '');
-  if (!hasData) { $("#eEval").textContent = "Por favor, responda pelo menos um critério."; return; }
-  
-  let photos = [];
-  const btn = e.target.querySelector('button[type="submit"]');
-  btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Enviando...`;
-  
-  try { photos = await Promise.all(Array.from(e.target.photos.files).slice(0, 3).map(shrink)); }
-  catch (err) { $("#eEval").textContent = "Erro com a imagem. Tente sem fotos."; btn.disabled = false; btn.innerHTML = `Enviar Avaliação`; return; }
-  
-  db.user = String(f.get("user")).trim();
-  localStorage.setItem("conectapcd:user", db.user);
+  const f = new FormData(e.target);
+  const id = document.getElementById("evalPlaceId").value;
+  const p = db.find(x => x.id === id);
+  if (!p) return;
 
-  const p = db.places.find(x => x.id === sel);
-  const newReview = {user:db.user, date:new Date().toISOString().slice(0, 10), note:Number(f.get("note")), comment:String(f.get("comment")).trim(), photos, c};
-  const updatedReviews = [...p.reviews, newReview];
+  const review = {
+    user: f.get("user"),
+    note: parseInt(f.get("note")),
+    comment: f.get("comment"),
+    c: {}
+  };
+  
+  CRITERIA.forEach(c => {
+    review.c[c.k] = f.get(c.k);
+  });
 
-  try {
-    await updateDoc(doc(placesRef, sel), { reviews: updatedReviews });
-    e.target.reset(); 
-    bootstrap.Modal.getInstance(document.getElementById("dEval")).hide(); 
-    choose(sel, false);
-  } catch(err) {
-    $("#eEval").textContent = "Erro ao enviar avaliação para o servidor.";
-  } finally {
-    btn.disabled = false; btn.innerHTML = `Enviar Avaliação`;
-  }
+  if (!p.reviews) p.reviews = [];
+  p.reviews.push(review);
+  saveData();
+  
+  bootstrap.Modal.getInstance(document.getElementById('modalEval')).hide();
+  selectPlace(p.id); 
 });
 
-// Reset da Base de Dados no Firebase
-$("#reset").addEventListener("click", async () => {
-  const b = $("#reset");
-  if (!armed) { 
-    armed = true; 
-    b.innerHTML = "<i class='bi bi-exclamation-triangle-fill me-1'></i>Confirmar Exclusão Global"; 
-    b.classList.add("fw-bolder");
-    return; 
-  }
-  armed = false; 
-  b.innerHTML = "<span class='spinner-border spinner-border-sm me-1'></span>Restaurando..."; 
-  b.classList.remove("fw-bolder");
-  
-  if (currentUser) {
-    try {
-      const snap = await getDocs(placesRef);
-      for (const d of snap.docs) {
-        await deleteDoc(d.ref);
-      }
-      await seedFirebase();
-    } catch(err) {
-      console.error("Error resetting database", err);
-    }
-  }
-  
-  b.innerHTML = "<i class='bi bi-arrow-counterclockwise me-1'></i>Restaurar base de dados inicial"; 
-  sel = null; 
-});
-
-// Inicia aplicação
-initFirebase();
+// Inicia a aplicação
+renderApp();
 </script>
+
 </body>
 </html>
