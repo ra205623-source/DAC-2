@@ -115,7 +115,8 @@
 
 <footer>
   <div class="container">
-    <p class="mb-0">desenvolvido por Giovanni Caio e Jhayson e Eduardo</p>
+    <p class="mb-1 fw-bold">Desenvolvido pelo grupo Hu1vr0t ©</p>
+    <p class="mb-0 small">Giovanni, Caio, Jhayson e Eduardo</p>
   </div>
 </footer>
 
@@ -202,7 +203,7 @@
 
           <hr>
           <h6 class="fw-bold text-success mb-3">Critérios Específicos</h6>
-          <p class="small text-muted mb-3">Deixar como "Não observei" diminui a nota do local. Use "Não se aplica" para itens que não fazem sentido no local.</p>
+          <p class="small text-muted mb-3">Deixar como "Não observei" diminui a nota do local.</p>
 
           <div id="criteriaContainer"></div>
 
@@ -245,20 +246,20 @@ const FIREBASE_CONFIG = {
 const STORAGE_KEY = "conectapcd_v4_cg";
 
 const CRITERIA = [
-  {k:"degrau",   t:"Entrada sem degraus",           canBeNA: true},
-  {k:"rampa",    t:"Possui Rampa",                  canBeNA: true},
-  {k:"banheiro", t:"Banheiro adaptado",             canBeNA: false},
-  {k:"circ",     t:"Espaço p/ circular de cadeira", canBeNA: false},
-  {k:"tatil",    t:"Piso tátil",                    canBeNA: false}, // chave sem acento
-  {k:"braile",   t:"Informações em braile",         canBeNA: false},
-  {k:"libras",   t:"Atendimento em Libras",         canBeNA: false}
+  {k:"degrau",   t:"Entrada sem degraus"},
+  {k:"rampa",    t:"Possui Rampa"},
+  {k:"banheiro", t:"Banheiro adaptado"},
+  {k:"circ",     t:"Espaço p/ circular de cadeira"},
+  {k:"tatil",    t:"Piso tátil"}, // chave sem acento
+  {k:"braile",   t:"Informações em braile"},
+  {k:"libras",   t:"Atendimento em Libras"}
 ];
 
 const SEED_DATA = [
   { id: "cg_1", name: "Bioparque Pantanal", cat: "Espaço público", address: "Altos da Afonso Pena",
     lat: -20.4534, lng: -54.5828,
     reviews: [{ user: "Equipe Conecta", note: 5, comment: "Referência.", at: 1,
-      c: { degrau:"y", rampa:"na", banheiro:"y", circ:"y", tatil:"y", braile:"y", libras:"y" } }] },
+      c: { degrau:"y", rampa:"y", banheiro:"y", circ:"y", tatil:"y", braile:"y", libras:"y" } }] },
   { id: "cg_2", name: "Parque das Nações Indígenas", cat: "Espaço público", address: "Av. Afonso Pena",
     lat: -20.4578, lng: -54.5862,
     reviews: [{ user: "Avaliador", note: 4, comment: "Boas rampas.", at: 1,
@@ -316,9 +317,11 @@ function saveLocal() {
 function startLocalMode(reason) {
   cloud = null;
   loadLocal();
-  const b = $("modeBanner");
-  b.textContent = reason || "Modo local: as avaliações ficam salvas só neste aparelho. Configure o Firebase no código para que todos os usuários vejam as mesmas avaliações.";
-  b.classList.remove("d-none");
+  if (reason) {
+    const b = $("modeBanner");
+    b.textContent = reason;
+    b.classList.remove("d-none");
+  }
   renderApp(true);
 }
 
@@ -427,15 +430,6 @@ function initMap() {
   const providers = [
     { name: "Ruas (Esri)",
       url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-      opt: { maxZoom: 19, attribution: 'Tiles &copy; Esri' } },
-    { name: "OpenStreetMap",
-      url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-      opt: { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } },
-    { name: "OpenStreetMap França",
-      url: "https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
-      opt: { subdomains: "abc", maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> France' } },
-    { name: "Satélite (Esri)",
-      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       opt: { maxZoom: 19, attribution: 'Tiles &copy; Esri' } }
   ];
   // Fundo offline: se todos os servidores de mapa estiverem bloqueados (ex.: pré-visualização do chat,
@@ -490,7 +484,6 @@ function initMap() {
   });
 
   layers[0].addTo(map);
-  L.control.layers(baseMaps, null, { position: "topright" }).addTo(map);
   map.on("baselayerchange", () => { if (!autoSwitching) manual = true; });
 
   markersLayer = L.layerGroup().addTo(map);
@@ -745,7 +738,6 @@ function openEvalModal(id) {
         <option value="blank">Não observei</option>
         <option value="y">Sim</option>
         <option value="n">Não</option>
-        ${c.canBeNA ? '<option value="na">Não se aplica</option>' : ''}
       </select>
     </div>`).join("");
 
